@@ -598,8 +598,7 @@ export default function ChatInterface({
 
   useEffect(() => {
     if (modelMenuOpen) {
-      const key = Number(selectedModel.multiplier) === 0 ? 'free' : selectedModel.provider;
-      setOpenGroups([key]);
+      setOpenGroups([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelMenuOpen]);
