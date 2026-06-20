@@ -48,16 +48,14 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
+              <li><Link href="/admin-setup" className="hover:text-white transition-colors">Admin Setup</Link></li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-600">
           <p>© {new Date().getFullYear()} TokenAI. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-            <p>Powered by OpenRouter · Supabase · Stripe</p>
-            <Link href="/admin-setup" className="text-gray-800 hover:text-gray-700 transition-colors opacity-20 hover:opacity-40">·</Link>
-          </div>
+          <p>Powered by OpenRouter · Supabase · Stripe</p>
         </div>
       </div>
     </footer>
