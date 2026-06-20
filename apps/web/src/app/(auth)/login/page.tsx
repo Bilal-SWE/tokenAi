@@ -107,6 +107,12 @@ export default function LoginPage() {
             Sign up
           </Link>
         </p>
+
+        <div className="border-t border-gray-100 mt-6 pt-4 text-center">
+          <Link href="/admin-setup" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            Admin Setup
+          </Link>
+        </div>
       </div>
     </div>
   );
