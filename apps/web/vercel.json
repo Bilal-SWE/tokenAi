@@ -1,3 +1,4 @@
 {
+  "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install && pnpm --filter shared build"
 }
