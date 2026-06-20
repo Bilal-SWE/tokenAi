@@ -49,12 +49,16 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return c.json({ error: 'Could not fetch wallet' }, 500);
   }
 
-  // Estimated input tokens (used to calculate affordable output)
+  // Estimated input tokens (rough: chars/4 + overhead for system prompt & history)
   const estInputTokens = Math.ceil(content.length / 4)
     + (fileText ? Math.ceil(fileText.length / 4) : 0)
-    + 500; // overhead for system prompt / history
+    + 200; // overhead for system prompt / history
 
-  let maxOutputTokens = 8000; // default cap
+  // How many output tokens the user can actually afford.
+  // For free models this is 8000 (the platform cap). For paid models we derive
+  // it from the wallet balance so the model literally cannot generate more than
+  // the user can pay for.
+  let maxOutputTokens = 8000; // safe default (overridden below for paid models)
 
   if (isFree) {
     // Free models: no balance needed, but enforce a daily message limit
@@ -71,17 +75,18 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       return c.json({ error: 'free_limit_reached', limit: FREE_DAILY_MESSAGE_LIMIT }, 429);
     }
   } else {
-    // Paid models: check balance covers at least the input cost
+    // Paid models: ensure balance covers at least the input cost
     const minRequired = Math.ceil(estInputTokens * Number(multiplier));
     if (wallet.balance < minRequired) {
       return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: minRequired }, 402);
     }
 
-    // Cap output tokens to exactly what the balance can afford.
-    // This prevents the model from generating more than the user can pay for.
-    const affordableTokens = Math.floor(wallet.balance / Number(multiplier));
-    const affordableOutput = affordableTokens - estInputTokens;
-    maxOutputTokens = Math.min(8000, Math.max(100, affordableOutput));
+    // How many total AI tokens the user can afford
+    const totalAffordableTokens = Math.floor(wallet.balance / Number(multiplier));
+    // Subtract estimated input to get the output budget
+    const affordableOutputTokens = Math.max(1, totalAffordableTokens - estInputTokens);
+    // Never exceed 8000 (model/platform hard cap)
+    maxOutputTokens = Math.min(8000, affordableOutputTokens);
   }
 
   // Create or retrieve conversation (skipped in compare-mode secondary stream)
@@ -195,11 +200,9 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       : contextMessages;
   }
 
-  // How many output chars the user can afford before balance runs out.
-  // chars ≈ tokens * 4  →  affordable_chars = (balance / multiplier - estInputTokens) * 4
-  const affordableOutputChars = isFree
-    ? Infinity
-    : Math.max(0, Math.floor((wallet.balance / Number(multiplier) - estInputTokens) * 4));
+  // Safety-net: mid-stream char limit derived from the same maxOutputTokens
+  // (chars ≈ tokens × 4). For free models this is effectively unlimited.
+  const affordableOutputChars = isFree ? Infinity : maxOutputTokens * 4;
 
   return streamSSE(c, async (stream) => {
     let assistantContent = '';
@@ -219,7 +222,11 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           model,
           messages: finalMessages,
           stream: true,
-          max_tokens: 8000,
+          // *** THIS IS THE KEY FIX ***
+          // Tell the model exactly how many tokens it is allowed to generate.
+          // For paid models this is derived from the user's actual wallet balance,
+          // so the model CANNOT generate more tokens than the user can pay for.
+          max_tokens: maxOutputTokens,
           // Native PDF processing
           ...(fileData
             ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }
