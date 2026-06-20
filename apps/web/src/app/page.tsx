@@ -23,7 +23,7 @@ export default function LandingPage() {
         <div className="relative max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs font-medium px-4 py-2 rounded-full mb-6">
             <Zap className="w-3.5 h-3.5" />
-            500,000 free tokens on signup — no credit card required
+            5,000 free tokens on signup — no credit card required
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-tight mb-6">
@@ -53,7 +53,7 @@ export default function LandingPage() {
           {/* Stats */}
           <div className="flex flex-wrap justify-center gap-8 sm:gap-16 text-center">
             {[
-              { label: 'Free tokens on signup', value: '500K' },
+              { label: 'Free tokens on signup', value: "5K" },
               { label: 'AI models available', value: '3+' },
               { label: 'No monthly fee', value: '$0' },
             ].map((s) => (
@@ -193,7 +193,7 @@ export default function LandingPage() {
             {[
               { name: 'Sarah K.', role: 'Software Engineer', text: 'Finally, an AI tool that doesn\'t charge me $20/month when I only use it occasionally. TokenAI is perfect for my workflow.' },
               { name: 'Ahmed R.', role: 'Product Manager', text: 'Switching between Claude and GPT in the same conversation is a game changer. Best AI platform I\'ve tried.' },
-              { name: 'Maria L.', role: 'Freelance Writer', text: 'The pay-as-you-go model is exactly what I needed. 500K free tokens got me started and I love the transparency.' },
+              { name: 'Maria L.', role: 'Freelance Writer', text: 'The pay-as-you-go model is exactly what I needed. 5K free tokens got me started and I love the transparency.' },
             ].map((t) => (
               <div key={t.name} className="bg-gray-900 border border-white/10 rounded-2xl p-6">
                 <div className="flex gap-1 mb-4">
@@ -229,7 +229,7 @@ export default function LandingPage() {
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:32px_32px]" />
             <div className="relative">
               <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Start chatting for free</h2>
-              <p className="text-blue-100 text-lg mb-8">500,000 tokens. No credit card. No expiry.</p>
+              <p className="text-blue-100 text-lg mb-8">5,000 tokens. No credit card. No expiry.</p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/register"
                   className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 font-bold px-8 py-4 rounded-xl text-base transition-all hover:shadow-xl hover:-translate-y-0.5">

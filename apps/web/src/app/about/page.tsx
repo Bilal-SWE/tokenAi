@@ -74,7 +74,7 @@ export default function AboutPage() {
           {/* CTA */}
           <div className="text-center bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-500/20 rounded-3xl p-10">
             <h2 className="text-2xl font-bold mb-3">Ready to try it?</h2>
-            <p className="text-gray-400 mb-6">Start with 500,000 free tokens — no credit card needed.</p>
+            <p className="text-gray-400 mb-6">Start with 5,000 free tokens — no credit card needed.</p>
             <Link href="/register"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-8 py-3 rounded-xl transition-all hover:-translate-y-0.5">
               Create free account

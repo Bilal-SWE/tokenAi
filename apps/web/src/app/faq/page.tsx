@@ -11,7 +11,7 @@ const FAQS = [
   {
     category: 'Getting started',
     items: [
-      { q: 'Is TokenAI free to use?', a: 'Yes! Every new account receives 500,000 free tokens on signup — no credit card required. That\'s enough for hundreds of conversations.' },
+      { q: 'Is TokenAI free to use?', a: 'Yes! Every new account receives 5,000 free tokens on signup — no credit card required. That\'s enough for hundreds of conversations.' },
       { q: 'What AI models are available?', a: 'TokenAI currently supports GPT-4o mini (OpenAI), Claude Haiku (Anthropic), and Gemini Flash (Google). All models are available from the same token balance.' },
       { q: 'Do I need a separate account for each AI provider?', a: 'No. TokenAI handles all provider integrations. You just create one account and get access to all supported models instantly.' },
     ],
