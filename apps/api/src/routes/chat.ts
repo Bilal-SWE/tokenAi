@@ -32,7 +32,15 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   }
 
   const modelInfo = getModel(model);
-  const multiplier = modelInfo?.multiplier ?? 1;
+
+  // Reject unknown / removed model IDs outright — a missing modelInfo would cause
+  // the multiplier to fall back to 1, which could let users run expensive models
+  // for almost free and would give wrong max_tokens budgets.
+  if (!modelInfo) {
+    return c.json({ error: 'model_not_supported', model }, 400);
+  }
+
+  const multiplier = modelInfo.multiplier;
   const isFree = Number(multiplier) === 0;
 
   const supabase = getSupabaseAdmin();
