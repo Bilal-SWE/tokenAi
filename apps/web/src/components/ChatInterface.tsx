@@ -825,7 +825,7 @@ export default function ChatInterface({
       if (status === 402) setError('Insufficient credits. Top up to continue — or switch to a free model.');
       else if (status === 400) setError('This model is no longer available. Please select a different model from the menu.');
       else if (status === 429) setError('Daily free limit reached. Switch to a paid model or try again tomorrow.');
-      else if (status === 502) setError("The AI provider rejected the request. Check the API server's OPENROUTER_API_KEY.");
+      else if (status === 502) setError(`AI provider error: ${(err as Error).message}`);
       else setError('Connection lost. The response may be incomplete.');
       setMessages((prev) => prev.map((m) => m.streaming ? { ...m, streaming: false } : m));
     } finally {

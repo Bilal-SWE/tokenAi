@@ -243,8 +243,9 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       });
 
       if (!response.ok || !response.body) {
-        console.error('OpenRouter error', { userId, model, status: response.status });
-        await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error' }) });
+        const errorBody = await response.text().catch(() => '');
+        console.error('OpenRouter error', { userId, model, status: response.status, body: errorBody });
+        await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: errorBody }) });
         return;
       }
 

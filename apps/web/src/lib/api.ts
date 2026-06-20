@@ -88,7 +88,9 @@ export async function apiStream(
         continue; // Skip malformed chunks
       }
       if (data?.error) {
-        throw new ApiError(502, data.error, data);
+        // Include OpenRouter's raw error details in the message for debugging
+        const msg = data.details ? `${data.error}: ${data.details}` : data.error;
+        throw new ApiError(502, msg, data);
       }
       if (data?.balance_exhausted) {
         balanceExhausted = true;
