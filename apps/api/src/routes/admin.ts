@@ -15,10 +15,48 @@ function isAdminEmail(email: string): boolean {
 async function adminGuard(c: Context<AdminEnv>, next: () => Promise<void>) {
   const userId = c.get('userId');
   const supabase = getSupabaseAdmin();
-  const { data: profile } = await supabase.from('profiles').select('email').eq('id', userId).single();
-  if (!profile || !isAdminEmail(profile.email)) return c.json({ error: 'Forbidden' }, 403);
+  const { data: profile } = await supabase.from('profiles').select('email, is_admin').eq('id', userId).single();
+  if (!profile) return c.json({ error: 'Forbidden' }, 403);
+  const isAdmin = profile.is_admin === true || isAdminEmail(profile.email);
+  if (!isAdmin) return c.json({ error: 'Forbidden' }, 403);
   await next();
 }
+
+// POST /api/admin/register — create a new admin account using invite code
+adminRouter.post('/register', async (c) => {
+  const { code, name, email, password } = await c.req.json<{
+    code: string; name: string; email: string; password: string;
+  }>();
+
+  const INVITE_CODE = process.env.ADMIN_INVITE_CODE || 'b2003';
+  if (!code || code !== INVITE_CODE) return c.json({ error: 'Invalid invite code' }, 403);
+  if (!name || !email || !password) return c.json({ error: 'All fields are required' }, 400);
+  if (password.length < 6) return c.json({ error: 'Password must be at least 6 characters' }, 400);
+
+  const supabase = getSupabaseAdmin();
+
+  // Create user via Supabase Auth (auto-confirm email)
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: name },
+  });
+
+  if (authError) return c.json({ error: authError.message }, 400);
+
+  // Mark as admin in profiles table
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({ id: authData.user.id, email, full_name: name, is_admin: true });
+
+  if (profileError) console.error('Failed to set is_admin on profile:', profileError.message);
+
+  // Create wallet
+  await supabase.from('wallets').upsert({ user_id: authData.user.id, balance: 0 }, { onConflict: 'user_id' });
+
+  return c.json({ success: true });
+});
 
 // GET /api/admin/check — quick admin status check (200 ok | 403 forbidden)
 adminRouter.get('/check', authMiddleware, adminGuard, async (c) => {

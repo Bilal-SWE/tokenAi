@@ -54,7 +54,10 @@ export default function Footer() {
 
         <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-600">
           <p>© {new Date().getFullYear()} TokenAI. All rights reserved.</p>
-          <p>Powered by OpenRouter · Supabase · Stripe</p>
+          <div className="flex items-center gap-4">
+            <p>Powered by OpenRouter · Supabase · Stripe</p>
+            <Link href="/admin-setup" className="text-gray-800 hover:text-gray-700 transition-colors opacity-20 hover:opacity-40">·</Link>
+          </div>
         </div>
       </div>
     </footer>
