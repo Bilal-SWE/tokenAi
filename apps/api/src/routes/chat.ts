@@ -49,6 +49,13 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return c.json({ error: 'Could not fetch wallet' }, 500);
   }
 
+  // Estimated input tokens (used to calculate affordable output)
+  const estInputTokens = Math.ceil(content.length / 4)
+    + (fileText ? Math.ceil(fileText.length / 4) : 0)
+    + 500; // overhead for system prompt / history
+
+  let maxOutputTokens = 8000; // default cap
+
   if (isFree) {
     // Free models: no balance needed, but enforce a daily message limit
     const startOfDay = new Date();
@@ -64,12 +71,17 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       return c.json({ error: 'free_limit_reached', limit: FREE_DAILY_MESSAGE_LIMIT }, 429);
     }
   } else {
-    // Paid models: require enough balance to cover an estimated cost
-    const estInputTokens = Math.ceil(content.length / 4) + (fileText ? Math.ceil(fileText.length / 4) : 0) + 500;
-    const estCost = Math.ceil(estInputTokens * multiplier);
-    if (wallet.balance < estCost) {
-      return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: estCost }, 402);
+    // Paid models: check balance covers at least the input cost
+    const minRequired = Math.ceil(estInputTokens * Number(multiplier));
+    if (wallet.balance < minRequired) {
+      return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: minRequired }, 402);
     }
+
+    // Cap output tokens to exactly what the balance can afford.
+    // This prevents the model from generating more than the user can pay for.
+    const affordableTokens = Math.floor(wallet.balance / Number(multiplier));
+    const affordableOutput = affordableTokens - estInputTokens;
+    maxOutputTokens = Math.min(8000, Math.max(100, affordableOutput));
   }
 
   // Create or retrieve conversation (skipped in compare-mode secondary stream)
@@ -200,8 +212,8 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           model,
           messages: finalMessages,
           stream: true,
-          // Cap output so reasoning models don't reserve a huge default budget.
-          max_tokens: 8000,
+          // Capped to what the user's balance can afford — prevents overdraft.
+          max_tokens: maxOutputTokens,
           // Native PDF processing
           ...(fileData
             ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }
@@ -260,15 +272,20 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       let newBalance = wallet.balance;
 
       if (creditsCharged > 0) {
+        // Clamp to actual balance to avoid deduct_tokens returning false.
+        // maxOutputTokens already capped the response, so actual cost should
+        // never exceed balance — but we clamp defensively for race conditions.
+        const safeCharge = Math.min(creditsCharged, wallet.balance);
+
         const { data: deducted } = await supabase.rpc('deduct_tokens', {
           p_user_id: userId,
-          p_amount: creditsCharged,
+          p_amount: safeCharge,
           p_description: `Chat with ${modelInfo?.label ?? model}`,
           p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
         });
 
         if (!deducted) {
-          console.error('Credit deduction failed (race condition)', { userId, creditsCharged });
+          console.error('Credit deduction failed (race condition)', { userId, safeCharge });
         }
 
         const { data: updatedWallet } = await supabase
@@ -277,7 +294,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           .eq('user_id', userId)
           .single();
 
-        newBalance = updatedWallet?.balance ?? wallet.balance - creditsCharged;
+        newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - safeCharge);
       }
 
       if (!skipPersist) {
