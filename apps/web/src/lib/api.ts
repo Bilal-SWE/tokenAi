@@ -51,7 +51,7 @@ export async function apiStream(
   path: string,
   body: unknown,
   onChunk: (data: unknown) => void,
-  onDone: (data: { tokensUsed: number; newBalance: number; conversationId: string }) => void
+  onDone: (data: { tokensUsed: number; newBalance: number; conversationId: string; balanceExhausted?: boolean }) => void
 ): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}${path}`, {
@@ -71,6 +71,7 @@ export async function apiStream(
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
+  let balanceExhausted = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -80,7 +81,7 @@ export async function apiStream(
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const raw = line.slice(6).trim();
-      let data: { done?: boolean; error?: string } | undefined;
+      let data: { done?: boolean; error?: string; balance_exhausted?: boolean } | undefined;
       try {
         data = JSON.parse(raw);
       } catch {
@@ -89,8 +90,12 @@ export async function apiStream(
       if (data?.error) {
         throw new ApiError(502, data.error, data);
       }
+      if (data?.balance_exhausted) {
+        balanceExhausted = true;
+        continue;
+      }
       if (data?.done) {
-        onDone(data as { tokensUsed: number; newBalance: number; conversationId: string });
+        onDone({ ...(data as { tokensUsed: number; newBalance: number; conversationId: string }), balanceExhausted });
       } else {
         onChunk(data);
       }

@@ -30,6 +30,7 @@ interface Message {
   model?: string;
   streaming?: boolean;
   isPresentation?: boolean;
+  balanceExhausted?: boolean;
   // Compare mode
   compareContent?: string;
   compareModel?: string;
@@ -250,6 +251,7 @@ export default function ChatInterface({
   const [mode, setMode] = useState<ChatMode>('chat');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lowBalanceWarning, setLowBalanceWarning] = useState(false);
   const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
   const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -743,6 +745,18 @@ export default function ChatInterface({
 
     clearInput();
     setError(null);
+    setLowBalanceWarning(false);
+
+    // Warn if balance might not be enough for a full response
+    const modelInfo2 = getModel(model);
+    const mult = Number(modelInfo2?.multiplier ?? 1);
+    if (mult > 0) {
+      const estInputCredits = Math.ceil((content.length / 4 + 500) * mult);
+      const minForFullReply = estInputCredits + Math.ceil(1000 * mult); // ~1000 output tokens
+      if (balance < minForFullReply) {
+        setLowBalanceWarning(true);
+      }
+    }
 
     const imageSnapshot = attachedImage;
     const fileSnapshot = attachedFile;
@@ -792,8 +806,14 @@ export default function ChatInterface({
           newConvId = done.conversationId;
           setBalance(done.newBalance);
           setMessages((prev) => prev.map((m) =>
-            m.streaming ? { ...m, streaming: false, tokensUsed: done.tokensUsed } : m
+            m.streaming ? {
+              ...m,
+              streaming: false,
+              tokensUsed: done.tokensUsed,
+              balanceExhausted: done.balanceExhausted,
+            } : m
           ));
+          if (done.balanceExhausted) setLowBalanceWarning(false);
           if (newConvId && !conversationId) {
             onConversationCreated?.(newConvId);
             router.replace(`/chat/${newConvId}`);
@@ -1342,6 +1362,12 @@ export default function ChatInterface({
                       {msg.streaming && (
                         <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse rounded-sm align-middle" />
                       )}
+                      {msg.balanceExhausted && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                          <span>⚠️</span>
+                          <span>Response cut off — your token balance ran out. <a href="/topup" className="underline font-medium">Top up to continue.</a></span>
+                        </div>
+                      )}
                     </>
                   )}
                   {!msg.streaming && (msg.tokensUsed ?? msg.tokens_used) !== undefined && (
@@ -1400,6 +1426,13 @@ export default function ChatInterface({
                 <div className="flex items-center gap-1.5 text-yellow-700 bg-yellow-50 rounded-lg px-3 py-2 text-xs mb-2">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   Low balance — <a href="/topup" className="underline font-medium">top up to continue</a>
+                </div>
+              )}
+
+              {lowBalanceWarning && !isFreeSelected && (
+                <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs mb-2">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  Your token balance may not be enough for a full response — the reply might be cut off mid-way.
                 </div>
               )}
 

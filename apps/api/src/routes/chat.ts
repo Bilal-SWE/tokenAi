@@ -195,9 +195,16 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       : contextMessages;
   }
 
+  // How many output chars the user can afford before balance runs out.
+  // chars ≈ tokens * 4  →  affordable_chars = (balance / multiplier - estInputTokens) * 4
+  const affordableOutputChars = isFree
+    ? Infinity
+    : Math.max(0, Math.floor((wallet.balance / Number(multiplier) - estInputTokens) * 4));
+
   return streamSSE(c, async (stream) => {
     let assistantContent = '';
     let tokensUsed = 0;
+    let balanceExhausted = false;
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -212,8 +219,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           model,
           messages: finalMessages,
           stream: true,
-          // Capped to what the user's balance can afford — prevents overdraft.
-          max_tokens: maxOutputTokens,
+          max_tokens: 8000,
           // Native PDF processing
           ...(fileData
             ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }
@@ -230,7 +236,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
-      while (true) {
+      outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -252,6 +258,14 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
             const delta = parsed.choices?.[0]?.delta?.content;
             if (delta) {
               assistantContent += delta;
+
+              // Stop mid-stream if output chars exceed what balance can cover
+              if (!isFree && assistantContent.length >= affordableOutputChars) {
+                balanceExhausted = true;
+                await reader.cancel();
+                await stream.writeSSE({ data: JSON.stringify({ balance_exhausted: true }) });
+                break outer;
+              }
             }
 
             await stream.writeSSE({ data: raw });
@@ -267,7 +281,9 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       }
 
       // Convert raw AI tokens → platform credits using the model multiplier
-      const creditsCharged = Math.ceil(tokensUsed * multiplier);
+      // If balance was exhausted mid-stream, charge only what the balance covers
+      const rawCredits = Math.ceil(tokensUsed * Number(multiplier));
+      const creditsCharged = balanceExhausted ? Math.min(rawCredits, wallet.balance) : rawCredits;
 
       let newBalance = wallet.balance;
 
