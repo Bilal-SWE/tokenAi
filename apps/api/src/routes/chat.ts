@@ -58,10 +58,10 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   }
 
   // Estimated input tokens (chars/4 + buffer for history & system prompt)
-  // Buffer of 2000 accounts for up to ~20 history messages that get injected later.
+  // Buffer of 500 covers typical conversation history without over-reducing output budget.
   const estInputTokens = Math.ceil(content.length / 4)
     + (fileText ? Math.ceil(fileText.length / 4) : 0)
-    + 2000;
+    + 500;
 
   // How many output tokens the user can actually afford.
   // For free models this is 8000 (the platform cap). For paid models we derive
