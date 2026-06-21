@@ -174,6 +174,34 @@ begin
 end;
 $$;
 
+-- Refund reserved tokens after a chat (returns unused portion to user)
+create or replace function public.refund_tokens(
+  p_user_id     uuid,
+  p_amount      bigint,
+  p_description text,
+  p_metadata    jsonb default '{}'
+)
+returns bigint language plpgsql security definer as $$
+declare
+  v_new_balance bigint;
+begin
+  update public.wallets
+    set balance = balance + p_amount, updated_at = now()
+    where user_id = p_user_id
+    returning balance into v_new_balance;
+
+  insert into public.transactions
+    (user_id, type, amount, balance_after, description, metadata)
+    values
+    (p_user_id, 'refund', p_amount, v_new_balance, p_description, p_metadata);
+
+  return v_new_balance;
+end;
+$$;
+
+-- Prevent wallet balance from ever going negative (hard DB-level guard)
+alter table public.wallets add constraint balance_non_negative check (balance >= 0);
+
 -- ─── ADMIN HELPER: per-user message count (efficient aggregate) ──────────────
 -- Used by GET /api/admin/users and GET /api/admin/stats
 create or replace function public.get_user_message_counts()
@@ -187,3 +215,5 @@ $$;
 -- ─── MIGRATION CHECKLIST (run in order if upgrading an existing DB) ──────────
 -- 1. alter table public.profiles add column if not exists banned boolean not null default false;
 -- 2. Run the get_user_message_counts() function above.
+-- 3. Run the refund_tokens() function above.
+-- 4. alter table public.wallets add constraint balance_non_negative check (balance >= 0);

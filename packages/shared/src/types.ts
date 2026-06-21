@@ -81,15 +81,15 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Fast',
   },
-  // gemini-pro-latest:  $2.00 input / $12.00 output per 1M  → mult 8
+  // gemini-flash-latest: alias → always latest Gemini Flash, ~$2.50/1M blended → mult 2
   {
-    id: 'google/gemini-pro-latest',
-    label: 'Gemini Pro',
+    id: 'google/gemini-flash-latest',
+    label: 'Gemini Flash Latest',
     provider: 'Google',
     tier: 'premium',
     category: 'best',
-    multiplier: 8,
-    costPer1MTokens: 7.00,
+    multiplier: 2,
+    costPer1MTokens: 2.50,
     supportsVision: true,
     badge: 'Best',
   },

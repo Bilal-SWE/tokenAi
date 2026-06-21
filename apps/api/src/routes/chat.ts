@@ -57,16 +57,21 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return c.json({ error: 'Could not fetch wallet' }, 500);
   }
 
-  // Estimated input tokens (rough: chars/4 + overhead for system prompt & history)
+  // Estimated input tokens (chars/4 + buffer for history & system prompt)
+  // Buffer of 2000 accounts for up to ~20 history messages that get injected later.
   const estInputTokens = Math.ceil(content.length / 4)
     + (fileText ? Math.ceil(fileText.length / 4) : 0)
-    + 200; // overhead for system prompt / history
+    + 2000;
 
   // How many output tokens the user can actually afford.
   // For free models this is 8000 (the platform cap). For paid models we derive
   // it from the wallet balance so the model literally cannot generate more than
   // the user can pay for.
   let maxOutputTokens = 8000; // safe default (overridden below for paid models)
+
+  // Amount reserved upfront from wallet before streaming (0 for free models).
+  // After streaming, unused portion is refunded via refund_tokens().
+  let reservationAmount = 0;
 
   if (isFree) {
     // Free models: no balance needed, but enforce a daily message limit
@@ -83,18 +88,27 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       return c.json({ error: 'free_limit_reached', limit: FREE_DAILY_MESSAGE_LIMIT }, 429);
     }
   } else {
-    // Paid models: ensure balance covers at least the input cost
-    const minRequired = Math.ceil(estInputTokens * Number(multiplier));
-    if (wallet.balance < minRequired) {
-      return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: minRequired }, 402);
-    }
-
     // How many total AI tokens the user can afford
     const totalAffordableTokens = Math.floor(wallet.balance / Number(multiplier));
     // Subtract estimated input to get the output budget
     const affordableOutputTokens = Math.max(1, totalAffordableTokens - estInputTokens);
     // Never exceed 8000 (model/platform hard cap)
     maxOutputTokens = Math.min(8000, affordableOutputTokens);
+
+    // Pre-reserve the maximum possible cost before streaming.
+    // This atomically locks the tokens so concurrent requests cannot overdraw
+    // the wallet. The unused portion is refunded after the stream ends.
+    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier));
+    const { data: reserved } = await supabase.rpc('deduct_tokens', {
+      p_user_id: userId,
+      p_amount: reservationAmount,
+      p_description: `Reserved for chat with ${modelInfo?.label ?? model}`,
+      p_metadata: { model, type: 'reservation' },
+    });
+
+    if (!reserved) {
+      return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: reservationAmount }, 402);
+    }
   }
 
   // Create or retrieve conversation (skipped in compare-mode secondary stream)
@@ -296,28 +310,21 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
         tokensUsed = Math.ceil((content.length + assistantContent.length) / 4);
       }
 
-      // Convert raw AI tokens → platform credits using the model multiplier
-      // If balance was exhausted mid-stream, charge only what the balance covers
-      const rawCredits = Math.ceil(tokensUsed * Number(multiplier));
-      const creditsCharged = balanceExhausted ? Math.min(rawCredits, wallet.balance) : rawCredits;
-
+      const actualCost = Math.ceil(tokensUsed * Number(multiplier));
       let newBalance = wallet.balance;
 
-      if (creditsCharged > 0) {
-        // Clamp to actual balance to avoid deduct_tokens returning false.
-        // maxOutputTokens already capped the response, so actual cost should
-        // never exceed balance — but we clamp defensively for race conditions.
-        const safeCharge = Math.min(creditsCharged, wallet.balance);
-
-        const { data: deducted } = await supabase.rpc('deduct_tokens', {
-          p_user_id: userId,
-          p_amount: safeCharge,
-          p_description: `Chat with ${modelInfo?.label ?? model}`,
-          p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
-        });
-
-        if (!deducted) {
-          console.error('Credit deduction failed (race condition)', { userId, safeCharge });
+      if (!isFree && reservationAmount > 0) {
+        // Refund the unused portion of the pre-reservation back to the user.
+        // If actual cost somehow exceeds the reservation (rare, due to input estimation),
+        // refundAmount is 0 and no refund is issued — user is charged reservationAmount.
+        const refundAmount = Math.max(0, reservationAmount - actualCost);
+        if (refundAmount > 0) {
+          await supabase.rpc('refund_tokens', {
+            p_user_id: userId,
+            p_amount: refundAmount,
+            p_description: `Refund for chat with ${modelInfo?.label ?? model}`,
+            p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
+          });
         }
 
         const { data: updatedWallet } = await supabase
@@ -326,7 +333,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           .eq('user_id', userId)
           .single();
 
-        newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - safeCharge);
+        newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
       }
 
       if (!skipPersist) {
@@ -336,7 +343,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           user_id: userId,
           role: 'assistant',
           content: assistantContent,
-          tokens_used: creditsCharged,
+          tokens_used: actualCost,
           model,
         });
 
@@ -351,13 +358,22 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
         data: JSON.stringify({
           done: true,
           conversationId: skipPersist ? null : conversationId,
-          tokensUsed: creditsCharged,
+          tokensUsed: actualCost,
           aiTokens: tokensUsed,
           newBalance,
         }),
       });
     } catch (err) {
       console.error('Chat stream error', { userId, model, err });
+      // Refund the full reservation so the user isn't charged for a failed request
+      if (!isFree && reservationAmount > 0) {
+        await supabase.rpc('refund_tokens', {
+          p_user_id: userId,
+          p_amount: reservationAmount,
+          p_description: 'Refund - stream error',
+          p_metadata: { model },
+        }).catch((e: unknown) => console.error('Refund on error failed', e));
+      }
       await stream.writeSSE({ data: JSON.stringify({ error: 'stream_error' }) });
     }
   });
