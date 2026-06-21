@@ -1,8 +1,22 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { apiFetch } from '@/lib/api';
 import { formatTokens } from '@tokenai/shared';
+
+const CACHE_KEY = 'tokenai_balance';
+
+function readCache(): number | null {
+  try {
+    const v = localStorage.getItem(CACHE_KEY);
+    return v !== null ? parseInt(v, 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(balance: number) {
+  try { localStorage.setItem(CACHE_KEY, String(balance)); } catch {}
+}
 
 interface WalletContextValue {
   balance: number;
@@ -20,29 +34,27 @@ const WalletContext = createContext<WalletContextValue>({
   setBalance: () => {},
 });
 
-export function WalletProvider({ children, initialBalance = 0 }: { children: ReactNode; initialBalance?: number }) {
-  const [balance, setBalanceState] = useState(initialBalance);
-  const [walletLoaded, setWalletLoaded] = useState(false);
+export function WalletProvider({ children, initialBalance }: { children: ReactNode; initialBalance?: number }) {
+  const cached = typeof window !== 'undefined' ? readCache() : null;
+  const seed = initialBalance ?? cached ?? 0;
+
+  const [balance, setBalanceState] = useState(seed);
+  const [walletLoaded, setWalletLoaded] = useState(initialBalance !== undefined || cached !== null);
 
   const setBalance = useCallback((newBalance: number) => {
     setBalanceState(newBalance);
+    writeCache(newBalance);
   }, []);
 
+  // Called by AppLayout after /api/init resolves — no extra fetch needed.
   const refreshBalance = useCallback(async () => {
-    try {
-      const data = await apiFetch<{ balance: number }>('/api/wallet');
-      setBalanceState(data.balance);
-    } catch {
-      // Silently fail — balance will show stale value
-    } finally {
-      setWalletLoaded(true);
-    }
+    setWalletLoaded(true);
   }, []);
 
   return (
     <WalletContext.Provider value={{
       balance,
-      formattedBalance: walletLoaded ? formatTokens(balance) : '...',
+      formattedBalance: formatTokens(balance),
       walletLoaded,
       refreshBalance,
       setBalance,

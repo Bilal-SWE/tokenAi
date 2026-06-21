@@ -12,6 +12,7 @@ import { walletRouter } from './routes/wallet';
 import { conversationsRouter } from './routes/conversations';
 import { adminRouter } from './routes/admin';
 import { generateImageRouter } from './routes/generate-image';
+import { initRouter } from './routes/init';
 import type { AppVariables } from './types';
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -25,6 +26,7 @@ app.use('*', cors({
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+app.route('/api/init', initRouter);
 app.route('/api/chat', chatRouter);
 app.route('/api/payments', paymentsRouter);
 app.route('/api/wallet', walletRouter);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -274,26 +274,20 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
-  const { refreshBalance } = useWallet();
+  const { setBalance, refreshBalance } = useWallet();
   const { t } = useAppPreferences();
 
-  const loadConversations = useCallback(async () => {
-    try {
-      const data = await apiFetch<ConversationSummary[]>('/api/conversations');
-      setConversations(data);
-    } catch {
-      // Non-fatal
-    } finally {
-      setLoadingConversations(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadConversations();
-    refreshBalance();
-    // Check admin status silently — 403 just means not admin
-    apiFetch('/api/admin/check').then(() => setIsAdmin(true)).catch(() => setIsAdmin(false));
-  }, [loadConversations, refreshBalance]);
+    apiFetch<{ conversations: ConversationSummary[]; balance: number; isAdmin: boolean }>('/api/init')
+      .then((data) => {
+        setConversations(data.conversations);
+        setBalance(data.balance);
+        setIsAdmin(data.isAdmin);
+        refreshBalance();
+      })
+      .catch(() => {})
+      .finally(() => setLoadingConversations(false));
+  }, [setBalance, refreshBalance]);
 
   function handleNewChat() {
     router.push('/chat');
