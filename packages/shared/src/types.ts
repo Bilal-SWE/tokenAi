@@ -81,32 +81,22 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Fast',
   },
-  // gemini-flash-latest: alias → always latest Gemini Flash, ~$2.50/1M blended → mult 2
+
+  // ─── DeepSeek ──────────────────────────────────────────────────────────
+  // deepseek-v4-flash:  $0.09 input / $0.18 output per 1M  → mult 1
   {
-    id: 'google/gemini-flash-latest',
-    label: 'Gemini Flash Latest',
-    provider: 'Google',
-    tier: 'premium',
-    category: 'best',
-    multiplier: 2,
-    costPer1MTokens: 2.50,
-    supportsVision: true,
-    badge: 'Best',
+    id: 'deepseek/deepseek-v4-flash',
+    label: 'DeepSeek Flash',
+    provider: 'DeepSeek',
+    tier: 'standard',
+    category: 'cheap',
+    multiplier: 1,
+    costPer1MTokens: 0.14,
+    supportsVision: false,
+    badge: 'Fast',
   },
 
   // ─── OpenAI GPT ────────────────────────────────────────────────────────
-  // gpt-mini-latest:  $0.75 input / $4.50 output per 1M  → mult 3
-  {
-    id: 'openai/gpt-mini-latest',
-    label: 'GPT Mini',
-    provider: 'OpenAI',
-    tier: 'standard',
-    category: 'cheap',
-    multiplier: 3,
-    costPer1MTokens: 2.63,
-    supportsVision: true,
-    badge: 'Fast',
-  },
   // gpt-5.5:  $5.00 input / $30.00 output per 1M  → mult 20
   {
     id: 'openai/gpt-5.5',

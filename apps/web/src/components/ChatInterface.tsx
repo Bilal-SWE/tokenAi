@@ -266,7 +266,7 @@ export default function ChatInterface({
   const [openImageGroups, setOpenImageGroups] = useState<string[]>([]);
   const [showCompareSoon, setShowCompareSoon] = useState(false);
   // Compare mode
-  const [modelB, setModelB] = useState<ModelId>('openai/gpt-mini-latest');
+  const [modelB, setModelB] = useState<ModelId>('deepseek/deepseek-v4-flash');
   const [modelBMenuOpen, setModelBMenuOpen] = useState(false);
   const [openGroupsB, setOpenGroupsB] = useState<string[]>([]);
   const modelBMenuRef = useRef<HTMLDivElement>(null);
