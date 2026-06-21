@@ -81,7 +81,7 @@ export async function apiStream(
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const raw = line.slice(6).trim();
-      let data: { done?: boolean; error?: string; balance_exhausted?: boolean } | undefined;
+      let data: { done?: boolean; error?: string; details?: string; balance_exhausted?: boolean } | undefined;
       try {
         data = JSON.parse(raw);
       } catch {
