@@ -259,6 +259,16 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       if (!response.ok || !response.body) {
         const errorBody = await response.text().catch(() => '');
         console.error('OpenRouter error', { userId, model, status: response.status, body: errorBody });
+        // Refund the full reservation — user got no response
+        if (!isFree && reservationAmount > 0) {
+          const { error: refundErr } = await supabase.rpc('refund_tokens', {
+            p_user_id: userId,
+            p_amount: reservationAmount,
+            p_description: 'Refund - upstream error',
+            p_metadata: { model },
+          });
+          if (refundErr) console.error('Refund on upstream error failed', refundErr);
+        }
         await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: errorBody }) });
         return;
       }
@@ -367,12 +377,13 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       console.error('Chat stream error', { userId, model, err });
       // Refund the full reservation so the user isn't charged for a failed request
       if (!isFree && reservationAmount > 0) {
-        await supabase.rpc('refund_tokens', {
+        const { error: refundErr } = await supabase.rpc('refund_tokens', {
           p_user_id: userId,
           p_amount: reservationAmount,
           p_description: 'Refund - stream error',
           p_metadata: { model },
-        }).catch((e: unknown) => console.error('Refund on error failed', e));
+        });
+        if (refundErr) console.error('Refund on stream error failed', refundErr);
       }
       await stream.writeSSE({ data: JSON.stringify({ error: 'stream_error' }) });
     }
