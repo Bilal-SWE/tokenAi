@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/auth';
 import { getSupabaseAdmin } from '../lib/supabase';
-import { formatTokens } from '@tokenai/shared';
+import { formatBalance } from '@tokenai/shared';
 import type { AppVariables } from '../types';
 
 type AdminEnv = { Variables: AppVariables };
@@ -111,7 +111,7 @@ adminRouter.get('/users', authMiddleware, adminGuard, async (c) => {
     created_at: u.created_at,
     banned: bannedMap[u.id] ?? false,
     balance: u.wallets?.[0]?.balance ?? 0,
-    formattedBalance: formatTokens(u.wallets?.[0]?.balance ?? 0),
+    formattedBalance: formatBalance(u.wallets?.[0]?.balance ?? 0),
     messageCount: countMap[u.id] ?? 0,
   }));
 
@@ -172,7 +172,7 @@ adminRouter.get('/users/:id', authMiddleware, adminGuard, async (c) => {
     created_at: profile.created_at,
     banned: profile.banned ?? false,
     balance: wallet?.balance ?? 0,
-    formattedBalance: formatTokens(wallet?.balance ?? 0),
+    formattedBalance: formatBalance(wallet?.balance ?? 0),
     totalMessages,
     totalTokensUsed,
     modelUsage,
@@ -195,7 +195,7 @@ adminRouter.post('/add-tokens', authMiddleware, adminGuard, async (c) => {
     p_description: description || 'Admin token grant', p_metadata: { source: 'admin' },
   });
   if (error) return c.json({ error: 'Failed to add tokens' }, 500);
-  return c.json({ success: true, newBalance, formattedBalance: formatTokens(newBalance) });
+  return c.json({ success: true, newBalance, formattedBalance: formatBalance(newBalance) });
 });
 
 // POST /api/admin/set-balance
@@ -205,7 +205,7 @@ adminRouter.post('/set-balance', authMiddleware, adminGuard, async (c) => {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from('wallets').upsert({ user_id: targetUserId, balance }, { onConflict: 'user_id' });
   if (error) return c.json({ error: 'Failed to set balance' }, 500);
-  return c.json({ success: true, balance, formattedBalance: formatTokens(balance) });
+  return c.json({ success: true, balance, formattedBalance: formatBalance(balance) });
 });
 
 // POST /api/admin/users/:id/ban

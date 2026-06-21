@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
 import { getSupabaseAdmin } from '../lib/supabase';
-import { formatTokens } from '@tokenai/shared';
+import { formatBalance } from '@tokenai/shared';
 import type { AppVariables } from '../types';
 
 export const walletRouter = new Hono<{ Variables: AppVariables }>();
@@ -29,7 +29,7 @@ walletRouter.get('/', authMiddleware, async (c) => {
 
   return c.json({
     balance,
-    formattedBalance: formatTokens(balance),
+    formattedBalance: formatBalance(balance),
     recentTransactions: txResult.data || [],
   });
 });

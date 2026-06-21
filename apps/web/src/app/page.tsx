@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Zap, MessageSquare, Shield, CreditCard, ChevronRight, Check, Star } from 'lucide-react';
 import PublicNav from '@/components/PublicNav';
 import Footer from '@/components/Footer';
-import { TOKEN_BUNDLES, AI_MODELS, formatTokens } from '@tokenai/shared';
+import { TOKEN_BUNDLES, AI_MODELS, formatBalance } from '@tokenai/shared';
 
 export default function LandingPage() {
   return (
@@ -135,7 +135,7 @@ export default function LandingPage() {
                   <div className="flex justify-between text-sm mt-1">
                     <span className="text-gray-500">Rate</span>
                     <span className="text-green-400 font-medium">
-                      {Number(model.multiplier) === 0 ? 'Free' : `${model.multiplier}× credits`}
+                      {model.nanodollarsPerToken === 0 ? 'Free' : `$${(model.nanodollarsPerToken / 1000).toFixed(model.nanodollarsPerToken < 1000 ? 2 : 0)}/1M`}
                     </span>
                   </div>
                 </div>
@@ -167,8 +167,8 @@ export default function LandingPage() {
                 )}
                 <div className="text-gray-400 text-sm font-medium mb-2">{bundle.label}</div>
                 <div className="text-3xl font-bold text-white mb-1">${bundle.usd}</div>
-                <div className="text-blue-400 font-semibold mb-4">{formatTokens(bundle.tokens)} tokens</div>
-                <div className="text-xs text-gray-500 mb-5">${(bundle.usd / bundle.tokens * 1_000_000).toFixed(2)} per 1M tokens</div>
+                <div className="text-blue-400 font-semibold mb-4">${bundle.usd} balance</div>
+                <div className="text-xs text-gray-500 mb-5">~{Math.floor(bundle.nanodollars / (500 * 1500)).toLocaleString()} cheap-model messages</div>
                 <Link href="/register"
                   className={`block text-center text-sm font-semibold py-2.5 rounded-xl transition-colors ${
                     bundle.popular

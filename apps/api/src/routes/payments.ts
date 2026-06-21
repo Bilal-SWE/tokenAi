@@ -32,7 +32,7 @@ paymentsRouter.post('/create-checkout', authMiddleware, async (c) => {
     metadata: {
       userId,
       bundleId: bundle.id,
-      tokensGranted: bundle.tokens.toString(),
+      nanodollarsGranted: bundle.nanodollars.toString(),
     },
   });
 
@@ -63,7 +63,7 @@ paymentsRouter.post('/webhook', async (c) => {
 
   if (event.type === 'payment_intent.succeeded') {
     const intent = event.data.object as Stripe.PaymentIntent;
-    const { userId, bundleId, tokensGranted } = intent.metadata;
+    const { userId, bundleId, nanodollarsGranted } = intent.metadata;
 
     const supabase = getSupabaseAdmin();
 
@@ -71,15 +71,15 @@ paymentsRouter.post('/webhook', async (c) => {
       user_id: userId,
       stripe_payment_intent: intent.id,
       amount_usd_cents: intent.amount,
-      tokens_granted: parseInt(tokensGranted),
+      tokens_granted: parseInt(nanodollarsGranted),
       status: 'completed',
       completed_at: new Date().toISOString(),
     });
 
     await supabase.rpc('add_tokens', {
       p_user_id: userId,
-      p_amount: parseInt(tokensGranted),
-      p_description: `Token purchase — ${bundleId}`,
+      p_amount: parseInt(nanodollarsGranted),
+      p_description: `Balance top-up — ${bundleId}`,
       p_metadata: { stripe_payment_intent: intent.id, bundleId },
     });
   }

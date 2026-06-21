@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
-import { formatTokens } from '@tokenai/shared';
+import { formatBalance } from '@tokenai/shared';
 import {
   Loader2, Plus, RefreshCw, Settings, Users, Coins, Ban, CheckCircle,
   Mail, MessageSquare, Clock, ChevronRight, X, Activity,
@@ -105,9 +105,10 @@ export default function AdminPage() {
     setErrorMsg('');
     try {
       const endpoint = setBalanceMode ? '/api/admin/set-balance' : '/api/admin/add-tokens';
+      const nanodollars = Math.round(parseFloat(amount) * 1_000_000_000);
       const body = setBalanceMode
-        ? { userId: selectedUser.id, balance: parseInt(amount) }
-        : { userId: selectedUser.id, amount: parseInt(amount), description: description || undefined };
+        ? { userId: selectedUser.id, balance: nanodollars }
+        : { userId: selectedUser.id, amount: nanodollars, description: description || undefined };
 
       const res = await apiFetch<{ newBalance?: number; balance?: number; formattedBalance: string }>(endpoint, {
         method: 'POST',
@@ -116,10 +117,10 @@ export default function AdminPage() {
 
       const newBal = res.newBalance ?? res.balance ?? 0;
       setUsers((prev) => prev.map((u) =>
-        u.id === selectedUser.id ? { ...u, balance: newBal, formattedBalance: formatTokens(newBal) } : u
+        u.id === selectedUser.id ? { ...u, balance: newBal, formattedBalance: formatBalance(newBal) } : u
       ));
-      if (userDetail) setUserDetail({ ...userDetail, balance: newBal, formattedBalance: formatTokens(newBal) });
-      setSuccessMsg(`✓ ${setBalanceMode ? 'Balance set to' : 'Added'} ${formatTokens(parseInt(amount))} tokens`);
+      if (userDetail) setUserDetail({ ...userDetail, balance: newBal, formattedBalance: formatBalance(newBal) });
+      setSuccessMsg(`✓ ${setBalanceMode ? 'Balance set to' : 'Added'} $${parseFloat(amount).toFixed(2)}`);
       setAmount('');
       setDescription('');
     } catch {
@@ -280,7 +281,7 @@ export default function AdminPage() {
                   ) : userDetail && (
                     <div className="flex gap-4 mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                       <span><strong style={{ color: 'var(--text-secondary)' }}>{userDetail.totalMessages}</strong> messages</span>
-                      <span><strong style={{ color: 'var(--text-secondary)' }}>{formatTokens(userDetail.totalTokensUsed)}</strong> tokens used</span>
+                      <span><strong style={{ color: 'var(--text-secondary)' }}>{formatBalance(userDetail.totalTokensUsed)}</strong> spent</span>
                     </div>
                   )}
                 </div>
@@ -425,10 +426,10 @@ export default function AdminPage() {
                       min="0"
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       style={{ background: 'var(--input-bg)', borderColor: 'var(--input-border)', color: 'var(--text-primary)' }}
-                      placeholder="e.g. 1000000"
+                      placeholder="e.g. 5.00"
                     />
-                    {amount && !isNaN(parseInt(amount)) && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>= {formatTokens(parseInt(amount))} tokens</p>
+                    {amount && !isNaN(parseFloat(amount)) && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>= ${parseFloat(amount).toFixed(2)}</p>
                     )}
                   </div>
 
@@ -454,7 +455,7 @@ export default function AdminPage() {
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg py-2.5 text-sm transition-colors flex items-center justify-center gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    {saving ? 'Saving...' : setBalanceMode ? 'Set balance' : `Add ${amount ? formatTokens(parseInt(amount) || 0) : ''} tokens`}
+                    {saving ? 'Saving...' : setBalanceMode ? 'Set balance' : `Add $${amount ? parseFloat(amount).toFixed(2) : '0.00'}`}
                   </button>
                 </div>
               </div>
@@ -542,7 +543,7 @@ export default function AdminPage() {
                                     : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                 )}
                               >
-                                {txn.type === 'deduction' ? '-' : '+'}{formatTokens(Math.abs(txn.amount))}
+                                {txn.type === 'deduction' ? '-' : '+'}{formatBalance(Math.abs(txn.amount))}
                               </span>
                               <span className="flex-1 text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{txn.description}</span>
                               <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-muted)' }}>

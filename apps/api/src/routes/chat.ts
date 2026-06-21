@@ -7,7 +7,7 @@ import type { AppVariables } from '../types';
 import type { SendMessageRequest } from '@tokenai/shared';
 import { getModel, AI_MODELS, FREE_DAILY_MESSAGE_LIMIT } from '@tokenai/shared';
 
-const FREE_MODEL_IDS = AI_MODELS.filter((m) => Number(m.multiplier) === 0).map((m) => m.id);
+const FREE_MODEL_IDS = AI_MODELS.filter((m) => m.nanodollarsPerToken === 0).map((m) => m.id);
 
 export const chatRouter = new Hono<{ Variables: AppVariables }>();
 
@@ -40,8 +40,8 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return c.json({ error: 'model_not_supported', model }, 400);
   }
 
-  const multiplier = modelInfo.multiplier;
-  const isFree = Number(multiplier) === 0;
+  const nanodollarsPerToken = modelInfo.nanodollarsPerToken;
+  const isFree = nanodollarsPerToken === 0;
 
   const supabase = getSupabaseAdmin();
 
@@ -89,7 +89,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     }
   } else {
     // How many total AI tokens the user can afford
-    const totalAffordableTokens = Math.floor(wallet.balance / Number(multiplier));
+    const totalAffordableTokens = Math.floor(wallet.balance / nanodollarsPerToken);
     // Subtract estimated input to get the output budget
     const affordableOutputTokens = Math.max(1, totalAffordableTokens - estInputTokens);
     // Never exceed 8000 (model/platform hard cap)
@@ -98,7 +98,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     // Pre-reserve the maximum possible cost before streaming.
     // This atomically locks the tokens so concurrent requests cannot overdraw
     // the wallet. The unused portion is refunded after the stream ends.
-    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier));
+    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * nanodollarsPerToken);
     const { data: reserved } = await supabase.rpc('deduct_tokens', {
       p_user_id: userId,
       p_amount: reservationAmount,
@@ -320,7 +320,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
         tokensUsed = Math.ceil((content.length + assistantContent.length) / 4);
       }
 
-      const actualCost = Math.ceil(tokensUsed * Number(multiplier));
+      const actualCost = Math.ceil(tokensUsed * nanodollarsPerToken);
       let newBalance = wallet.balance;
 
       if (!isFree && reservationAmount > 0) {
@@ -333,7 +333,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
             p_user_id: userId,
             p_amount: refundAmount,
             p_description: `Refund for chat with ${modelInfo?.label ?? model}`,
-            p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
+            p_metadata: { model, conversationId, aiTokens: tokensUsed, nanodollarsPerToken },
           });
         }
 

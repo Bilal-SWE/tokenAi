@@ -14,7 +14,7 @@ import { useAppPreferences } from '@/context/AppPreferencesContext';
 import MarkdownMessage from './MarkdownMessage';
 import SlideViewer from './SlideViewer';
 import ConversationPickerModal from './ConversationPickerModal';
-import { AI_MODELS, IMAGE_MODELS, formatTokens, getModel, creditsForTokens } from '@tokenai/shared';
+import { AI_MODELS, IMAGE_MODELS, formatBalance, getModel, costInNanodollars } from '@tokenai/shared';
 import type { ModelId, ChatMode, ModelTier, AIModel, ImageModelId } from '@tokenai/shared';
 import type { ConversationSummary } from '@tokenai/shared';
 import clsx from 'clsx';
@@ -120,8 +120,8 @@ const TIER_COLOR: Record<ModelTier, string> = {
 };
 
 const CHEAPEST_PAID_MODEL = AI_MODELS
-  .filter((m) => m.multiplier > 0)
-  .reduce((a, b) => (b.multiplier < a.multiplier ? b : a));
+  .filter((m) => m.nanodollarsPerToken > 0)
+  .reduce((a, b) => (b.nanodollarsPerToken < a.nanodollarsPerToken ? b : a));
 
 const PROVIDER_SECTIONS: { provider: string; title: string }[] = [
   { provider: 'Google',    title: 'Google Gemini' },
@@ -224,8 +224,12 @@ function providerTheme(provider: string): ProviderTheme {
   return PROVIDER_THEME[provider] ?? DEFAULT_THEME;
 }
 
-function rateLabel(multiplier: number): string {
-  return multiplier === 0 ? 'Free' : `${multiplier}×`;
+function rateLabel(nanodollarsPerToken: number): string {
+  if (nanodollarsPerToken === 0) return 'Free';
+  const dollarsPerMillion = nanodollarsPerToken / 1000;
+  return dollarsPerMillion < 1
+    ? `$${dollarsPerMillion.toFixed(2)}/1M`
+    : `$${Math.round(dollarsPerMillion)}/1M`;
 }
 
 
@@ -550,7 +554,7 @@ export default function ChatInterface({
   function selectModel(m: AIModel) {
     setModel(m.id);
     setModelMenuOpen(false);
-    if (m.multiplier > 0) setRatePopup(m);
+    if (m.nanodollarsPerToken > 0) setRatePopup(m);
   }
 
   function toggleGroup(key: string) {
@@ -586,8 +590,8 @@ export default function ChatInterface({
   const estimatedTokens = Math.ceil(getInput().length / 4)
     + (attachedFile?.text ? Math.ceil(attachedFile.text.length / 4) : 0);
   const selectedModel = getModel(model) ?? AI_MODELS[0];
-  const isFreeSelected = Number(selectedModel.multiplier) === 0;
-  const estimatedCredits = creditsForTokens(model, estimatedTokens);
+  const isFreeSelected = selectedModel.nanodollarsPerToken === 0;
+  const estimatedCost = costInNanodollars(model, estimatedTokens);
   const theme = providerTheme(selectedModel.provider);
   const supportsVision = selectedModel.supportsVision;
 
@@ -749,10 +753,10 @@ export default function ChatInterface({
 
     // Warn if balance might not be enough for a full response
     const modelInfo2 = getModel(model);
-    const mult = Number(modelInfo2?.multiplier ?? 1);
-    if (mult > 0) {
-      const estInputCredits = Math.ceil((content.length / 4 + 500) * mult);
-      const minForFullReply = estInputCredits + Math.ceil(1000 * mult); // ~1000 output tokens
+    const rate = modelInfo2?.nanodollarsPerToken ?? 0;
+    if (rate > 0) {
+      const estInputCost = Math.ceil((content.length / 4 + 500) * rate);
+      const minForFullReply = estInputCost + Math.ceil(1000 * rate);
       if (balance < minForFullReply) {
         setLowBalanceWarning(true);
       }
@@ -923,7 +927,7 @@ export default function ChatInterface({
                     <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', theme.userBubble)} />
                     <span className="font-medium text-sm truncate">{selectedModel.label}</span>
                     <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', TIER_BADGE[selectedModel.tier])}>
-                      {rateLabel(selectedModel.multiplier)}
+                      {rateLabel(selectedModel.nanodollarsPerToken)}
                     </span>
                     <span className="text-xs truncate hidden sm:inline" style={{ color: 'var(--text-muted)' }}>
                       · {selectedModel.provider} · {selectedModel.badge}
@@ -977,7 +981,7 @@ export default function ChatInterface({
                                     </span>
                                   </div>
                                   <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                                    {rateLabel(m.multiplier)} rate
+                                    {rateLabel(m.nanodollarsPerToken)} rate
                                   </div>
                                 </div>
                               </button>
@@ -991,12 +995,12 @@ export default function ChatInterface({
                         ...(isAdmin ? [{
                           key: 'free', title: 'Free', sub: 'no credits · daily limit',
                           bg: 'bg-violet-50 dark:bg-violet-900/20', dot: 'bg-violet-500',
-                          items: AI_MODELS.filter((m) => Number(m.multiplier) === 0),
+                          items: AI_MODELS.filter((m) => m.nanodollarsPerToken === 0),
                         }] : []),
                         ...PROVIDER_SECTIONS.map((s) => ({
                           key: s.provider, title: s.title, sub: '',
                           bg: providerTheme(s.provider).groupBg + ' dark:bg-opacity-10', dot: providerTheme(s.provider).userBubble,
-                          items: AI_MODELS.filter((m) => m.provider === s.provider && Number(m.multiplier) > 0),
+                          items: AI_MODELS.filter((m) => m.provider === s.provider && m.nanodollarsPerToken > 0),
                         })),
                       ].map((group) => {
                         if (group.items.length === 0) return null;
@@ -1037,7 +1041,7 @@ export default function ChatInterface({
                                     </span>
                                   </div>
                                   <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                                    {rateLabel(m.multiplier)} rate
+                                    {rateLabel(m.nanodollarsPerToken)} rate
                                   </div>
                                 </div>
                               </button>
@@ -1071,12 +1075,12 @@ export default function ChatInterface({
               ...(isAdmin ? [{
                 key: 'free', title: 'Free', sub: 'no credits · daily limit',
                 bg: 'bg-violet-50 dark:bg-violet-900/20', dot: 'bg-violet-500',
-                items: AI_MODELS.filter((m) => Number(m.multiplier) === 0),
+                items: AI_MODELS.filter((m) => m.nanodollarsPerToken === 0),
               }] : []),
               ...PROVIDER_SECTIONS.map((s) => ({
                 key: s.provider, title: s.title, sub: '',
                 bg: providerTheme(s.provider).groupBg + ' dark:bg-opacity-10', dot: providerTheme(s.provider).userBubble,
-                items: AI_MODELS.filter((m) => m.provider === s.provider && Number(m.multiplier) > 0),
+                items: AI_MODELS.filter((m) => m.provider === s.provider && m.nanodollarsPerToken > 0),
               })),
             ];
 
@@ -1098,7 +1102,7 @@ export default function ChatInterface({
                     <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', providerTheme(selected.provider).userBubble)} />
                     <span className="font-medium text-sm truncate">{selected.label}</span>
                     <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', TIER_BADGE[selected.tier])}>
-                      {rateLabel(selected.multiplier)}
+                      {rateLabel(selected.nanodollarsPerToken)}
                     </span>
                   </div>
                   <ChevronDown className={clsx('w-4 h-4 flex-shrink-0 transition-transform', menuOpen && 'rotate-180')} style={{ color: 'var(--text-muted)' }} />
@@ -1133,7 +1137,7 @@ export default function ChatInterface({
                                     {m.badge}
                                   </span>
                                 </div>
-                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{rateLabel(m.multiplier)} rate</div>
+                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{rateLabel(m.nanodollarsPerToken)} rate</div>
                               </div>
                             </button>
                           ))}
@@ -1183,7 +1187,7 @@ export default function ChatInterface({
                       <Sparkles className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
                       <span className="font-medium text-sm truncate">{selectedImage.label}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 bg-violet-600 text-white">
-                        {formatTokens(selectedImage.credits)} tokens
+                        {formatBalance(selectedImage.nanodollarsPerImage)}
                       </span>
                       <span className="text-xs truncate hidden sm:inline" style={{ color: 'var(--text-muted)' }}>
                         · {selectedImage.provider}
@@ -1238,7 +1242,7 @@ export default function ChatInterface({
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{im.label}</span>
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 bg-violet-600 text-white">
-                                      {formatTokens(im.credits)} tokens
+                                      {formatBalance(im.nanodollarsPerImage)}
                                     </span>
                                   </div>
                                   <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{im.quality}</div>
@@ -1317,7 +1321,7 @@ export default function ChatInterface({
                             {side.mdl?.split('/')[1]}
                           </span>
                           <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold', TIER_BADGE[sideModel?.tier ?? 'standard'])}>
-                            {rateLabel(sideModel?.multiplier ?? 1)}
+                            {rateLabel(sideModel?.nanodollarsPerToken ?? 1)}
                           </span>
                           {side.streaming && <Loader2 className="w-3 h-3 animate-spin ml-auto" style={{ color: 'var(--text-muted)' }} />}
                         </div>
@@ -1332,7 +1336,7 @@ export default function ChatInterface({
                         {!side.streaming && side.tokens !== undefined && (
                           <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'var(--card-border)' }}>
                             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                              {side.tokens === 0 ? 'Free' : `${formatTokens(side.tokens)} credits`}
+                              {side.tokens === 0 ? 'Free' : formatBalance(side.tokens)}
                             </span>
                             <button onClick={() => copyMessage(msg.id + i, side.content)} title="Copy"
                               className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
@@ -1381,7 +1385,7 @@ export default function ChatInterface({
                       <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                         {(msg.tokensUsed ?? msg.tokens_used) === 0
                           ? 'Free'
-                          : `${formatTokens(msg.tokensUsed ?? msg.tokens_used ?? 0)} credits`}
+                          : formatBalance(msg.tokensUsed ?? msg.tokens_used ?? 0)}
                       </span>
                       {!msg.generatedImage && msg.content && (
                         <button onClick={() => copyMessage(msg.id, msg.content)} title="Copy" className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
@@ -1586,7 +1590,7 @@ export default function ChatInterface({
                     {/* Credit estimate */}
                     {hasInput && !isGenerateMode && (
                       <span className={clsx('ml-2 text-xs font-medium', isFreeSelected ? 'text-green-600' : theme.estimate)}>
-                        {isFreeSelected ? 'Free' : `~${formatTokens(estimatedCredits)} credits`}
+                        {isFreeSelected ? 'Free' : `~${formatBalance(estimatedCost)}`}
                       </span>
                     )}
                   </div>
@@ -1683,22 +1687,19 @@ export default function ChatInterface({
             <div className="px-5 pb-4">
               <div className="rounded-xl p-5 text-center" style={{ background: 'var(--hover-bg)' }}>
                 <span className={clsx('text-5xl font-extrabold tabular-nums', TIER_COLOR[ratePopup.tier])}>
-                  {ratePopup.multiplier}<span className="text-3xl">×</span>
+                  ${Math.round(ratePopup.nanodollarsPerToken / 1000)}
                 </span>
-                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-                  {ratePopup.multiplier === 1 ? 'baseline rate — cheapest paid model' : `compared to ${CHEAPEST_PAID_MODEL.label}`}
-                </p>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>per million tokens</p>
               </div>
             </div>
 
             {/* Description */}
             <div className="px-5 pb-5 space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <p>
-                {ratePopup.multiplier === 1
-                  ? <><b style={{ color: 'var(--text-primary)' }}>{ratePopup.label}</b> uses the lowest token rate available.</>
-                  : <>For the same message, <b style={{ color: 'var(--text-primary)' }}>{ratePopup.label}</b> uses{' '}
-                    <b style={{ color: 'var(--text-primary)' }}>{ratePopup.multiplier}×</b> more tokens than{' '}
-                    <b style={{ color: 'var(--text-primary)' }}>{CHEAPEST_PAID_MODEL.label}</b> — because it&apos;s a more capable model.</>}
+                <b style={{ color: 'var(--text-primary)' }}>{ratePopup.label}</b> costs{' '}
+                <b style={{ color: 'var(--text-primary)' }}>${(ratePopup.nanodollarsPerToken / 1000).toFixed(2)}</b> per million tokens.
+                A typical 1,500-token message costs about{' '}
+                <b style={{ color: 'var(--text-primary)' }}>{formatBalance(ratePopup.nanodollarsPerToken * 1500)}</b>.
               </p>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>You&apos;re only charged for what you actually use.</p>
             </div>
