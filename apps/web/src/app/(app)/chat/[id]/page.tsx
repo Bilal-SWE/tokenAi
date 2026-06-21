@@ -21,7 +21,7 @@ export default function ConversationPage() {
   const conversationId = params.id;
 
   const [messages, setMessages] = useState<StoredMessage[]>([]);
-  const [initialModel, setInitialModel] = useState<ModelId>('google/gemini-3.1-flash-lite');
+  const [initialModel, setInitialModel] = useState<ModelId>('google/gemini-2.5-flash-lite');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

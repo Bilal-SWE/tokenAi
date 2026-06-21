@@ -57,15 +57,15 @@ export const AI_MODELS = [
   },
 
   // ─── Google Gemini ─────────────────────────────────────────────────────
-  // gemini-3.1-flash-lite:  $0.25 input / $1.50 output per 1M  → mult 1
+  // gemini-2.5-flash-lite:  $0.10 input / $0.40 output per 1M  → mult 1
   {
-    id: 'google/gemini-3.1-flash-lite',
-    label: 'Gemini Flash Lite',
+    id: 'google/gemini-2.5-flash-lite',
+    label: 'Gemini 2.5 Flash Lite',
     provider: 'Google',
     tier: 'standard',
     category: 'cheap',
     multiplier: 1,
-    costPer1MTokens: 0.88,
+    costPer1MTokens: 0.25,
     supportsVision: true,
     badge: 'Cheapest',
   },
@@ -81,22 +81,44 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Fast',
   },
-
-  // ─── DeepSeek ──────────────────────────────────────────────────────────
-  // deepseek-v4-flash:  $0.09 input / $0.18 output per 1M  → mult 1
+  // gemini-2.5-pro:  $1.25 input / $10.00 output per 1M  → mult 7
   {
-    id: 'deepseek/deepseek-v4-flash',
-    label: 'DeepSeek Flash',
-    provider: 'DeepSeek',
-    tier: 'standard',
-    category: 'cheap',
-    multiplier: 1,
-    costPer1MTokens: 0.14,
-    supportsVision: false,
-    badge: 'Fast',
+    id: 'google/gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    provider: 'Google',
+    tier: 'premium',
+    category: 'best',
+    multiplier: 7,
+    costPer1MTokens: 5.63,
+    supportsVision: true,
+    badge: 'Best',
   },
 
   // ─── OpenAI GPT ────────────────────────────────────────────────────────
+  // gpt-4o-mini:  $0.15 input / $0.60 output per 1M  → mult 1
+  {
+    id: 'openai/gpt-4o-mini',
+    label: 'GPT-4o Mini',
+    provider: 'OpenAI',
+    tier: 'standard',
+    category: 'cheap',
+    multiplier: 1,
+    costPer1MTokens: 0.38,
+    supportsVision: true,
+    badge: 'Cheapest',
+  },
+  // gpt-5-mini:  $0.25 input / $2.00 output per 1M  → mult 2
+  {
+    id: 'openai/gpt-5-mini',
+    label: 'GPT-5 Mini',
+    provider: 'OpenAI',
+    tier: 'standard',
+    category: 'fast',
+    multiplier: 2,
+    costPer1MTokens: 1.13,
+    supportsVision: true,
+    badge: 'Fast',
+  },
   // gpt-5.5:  $5.00 input / $30.00 output per 1M  → mult 20
   {
     id: 'openai/gpt-5.5',
@@ -111,22 +133,22 @@ export const AI_MODELS = [
   },
 
   // ─── Anthropic Claude ──────────────────────────────────────────────────
-  // claude-haiku-latest:  $1.00 input / $5.00 output per 1M  → mult 3
+  // claude-haiku-4.5:  $1.00 input / $5.00 output per 1M  → mult 4
   {
-    id: 'anthropic/claude-haiku-latest',
-    label: 'Claude Haiku',
+    id: 'anthropic/claude-haiku-4.5',
+    label: 'Claude Haiku 4.5',
     provider: 'Anthropic',
     tier: 'standard',
     category: 'cheap',
-    multiplier: 3,
+    multiplier: 4,
     costPer1MTokens: 3.00,
     supportsVision: true,
     badge: 'Cheapest',
   },
-  // claude-sonnet-latest:  $3.00 input / $15.00 output per 1M  → mult 10
+  // claude-sonnet-4.5:  $3.00 input / $15.00 output per 1M  → mult 10
   {
-    id: 'anthropic/claude-sonnet-latest',
-    label: 'Claude Sonnet',
+    id: 'anthropic/claude-sonnet-4.5',
+    label: 'Claude Sonnet 4.5',
     provider: 'Anthropic',
     tier: 'premium',
     category: 'fast',
@@ -138,24 +160,12 @@ export const AI_MODELS = [
   // claude-opus-4.8:  $5.00 input / $25.00 output per 1M  → mult 17
   {
     id: 'anthropic/claude-opus-4.8',
-    label: 'Claude Opus 4',
-    provider: 'Anthropic',
-    tier: 'premium',
-    category: 'medium',
-    multiplier: 17,
-    costPer1MTokens: 15.00,
-    supportsVision: true,
-    badge: 'Balanced',
-  },
-  // claude-fable-5:  $10.00 input / $50.00 output per 1M  → mult 33
-  {
-    id: 'anthropic/claude-fable-5',
-    label: 'Claude Fable 5',
+    label: 'Claude Opus 4.8',
     provider: 'Anthropic',
     tier: 'ultra',
     category: 'best',
-    multiplier: 33,
-    costPer1MTokens: 30.00,
+    multiplier: 17,
+    costPer1MTokens: 15.00,
     supportsVision: true,
     badge: 'Best',
   },

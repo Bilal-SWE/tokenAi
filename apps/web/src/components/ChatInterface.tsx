@@ -131,7 +131,7 @@ const PROVIDER_SECTIONS: { provider: string; title: string }[] = [
 
 // One flagship model per provider — the best choice for generating presentations
 const PRESENTATION_MODELS = [
-  AI_MODELS.find((m) => m.id === 'anthropic/claude-sonnet-latest')!,
+  AI_MODELS.find((m) => m.id === 'anthropic/claude-sonnet-4.5')!,
   AI_MODELS.find((m) => m.id === 'openai/gpt-5.5')!,
   AI_MODELS.find((m) => m.id === 'google/gemini-3.5-flash')!,
 ].filter(Boolean);
@@ -235,7 +235,7 @@ function rateLabel(multiplier: number): string {
 export default function ChatInterface({
   conversationId,
   initialMessages = [],
-  initialModel = 'google/gemini-3.1-flash-lite',
+  initialModel = 'google/gemini-2.5-flash-lite',
   onConversationCreated,
   placeholder = 'Type a message...',
 }: Props) {
@@ -246,7 +246,7 @@ export default function ChatInterface({
   // Only `hasInput` (a boolean) triggers re-renders (just for the send-button state).
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState<ModelId>(
-    getModel(initialModel) ? initialModel : 'google/gemini-3.1-flash-lite'
+    getModel(initialModel) ? initialModel : 'google/gemini-2.5-flash-lite'
   );
   const [mode, setMode] = useState<ChatMode>('chat');
   const [streaming, setStreaming] = useState(false);
@@ -266,7 +266,7 @@ export default function ChatInterface({
   const [openImageGroups, setOpenImageGroups] = useState<string[]>([]);
   const [showCompareSoon, setShowCompareSoon] = useState(false);
   // Compare mode
-  const [modelB, setModelB] = useState<ModelId>('deepseek/deepseek-v4-flash');
+  const [modelB, setModelB] = useState<ModelId>('google/gemini-2.5-flash-lite');
   const [modelBMenuOpen, setModelBMenuOpen] = useState(false);
   const [openGroupsB, setOpenGroupsB] = useState<string[]>([]);
   const modelBMenuRef = useRef<HTMLDivElement>(null);
