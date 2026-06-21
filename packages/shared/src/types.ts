@@ -107,15 +107,15 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Cheapest',
   },
-  // gpt-5-mini:  $0.25 input / $2.00 output per 1M  → mult 2
+  // gpt-4o:  $2.50 input / $10.00 output per 1M  → mult 7
   {
-    id: 'openai/gpt-5-mini',
-    label: 'GPT-5 Mini',
+    id: 'openai/gpt-4o',
+    label: 'GPT-4o',
     provider: 'OpenAI',
-    tier: 'standard',
+    tier: 'premium',
     category: 'fast',
-    multiplier: 2,
-    costPer1MTokens: 1.13,
+    multiplier: 7,
+    costPer1MTokens: 6.25,
     supportsVision: true,
     badge: 'Fast',
   },
