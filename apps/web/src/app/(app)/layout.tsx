@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { WalletProvider, useWallet } from '@/context/WalletContext';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
+import { formatTokens } from '@tokenai/shared';
 import type { ConversationSummary } from '@tokenai/shared';
 import clsx from 'clsx';
 
@@ -165,7 +166,7 @@ function Sidebar({
           style={{ color: 'var(--text-secondary)' }}
         >
           <Wallet className="w-4 h-4" />
-          <span className="font-medium">{walletLoaded ? formattedBalance : '...'}</span>
+          <span className="font-medium">{walletLoaded ? `${formattedBalance} tokens` : '...'}</span>
         </Link>
         <Link
           href="/settings"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { formatBalance } from '@tokenai/shared';
+import { formatTokens } from '@tokenai/shared';
 import {
   Users, MessageSquare, Coins, DollarSign, Loader2, TrendingUp, RefreshCw,
   UserPlus, Zap, Award,
@@ -202,7 +202,7 @@ export default function AdminStatsPage() {
         <StatCard
           icon={Coins}
           label="Tokens consumed"
-          value={formatBalance(stats.totalTokensUsed)}
+          value={formatTokens(stats.totalTokensUsed)}
           color="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
         />
         <StatCard
@@ -271,7 +271,7 @@ export default function AdminStatsPage() {
                           {m.model.split('/')[1] || m.model}
                         </span>
                         <span style={{ color: 'var(--text-muted)' }}>
-                          {m.count.toLocaleString()} · {pct}% · {formatBalance(m.tokensUsed)}
+                          {m.count.toLocaleString()} · {pct}% · {formatTokens(m.tokensUsed)}
                         </span>
                       </div>
                       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--hover-bg)' }}>
@@ -337,7 +337,7 @@ export default function AdminStatsPage() {
                         ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                         : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
                     )}>
-                      {formatBalance(u.balance)}
+                      {formatTokens(u.balance)}
                     </div>
                   </div>
                 </div>

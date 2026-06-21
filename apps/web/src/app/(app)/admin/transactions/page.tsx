@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { formatBalance } from '@tokenai/shared';
+import { formatTokens } from '@tokenai/shared';
 import { Loader2, RefreshCw, ArrowUpCircle, ArrowDownCircle, Receipt } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -103,7 +103,7 @@ export default function AdminTransactionsPage() {
                 </div>
                 <div className="col-span-3 text-sm text-gray-600 truncate">{tx.description}</div>
                 <div className={clsx('col-span-2 text-sm font-semibold text-right', tx.amount > 0 ? 'text-green-600' : 'text-red-500')}>
-                  {tx.amount > 0 ? '+' : ''}{formatBalance(Math.abs(tx.amount))}
+                  {tx.amount > 0 ? '+' : ''}{formatTokens(Math.abs(tx.amount))}
                 </div>
                 <div className="col-span-2 text-xs text-gray-400 text-right">
                   {new Date(tx.created_at).toLocaleDateString()}

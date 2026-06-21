@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { apiFetch } from '@/lib/api';
-import { formatBalance } from '@tokenai/shared';
+import { formatTokens } from '@tokenai/shared';
 
 interface WalletContextValue {
   balance: number;
@@ -42,7 +42,7 @@ export function WalletProvider({ children, initialBalance = 0 }: { children: Rea
   return (
     <WalletContext.Provider value={{
       balance,
-      formattedBalance: walletLoaded ? formatBalance(balance) : '...',
+      formattedBalance: walletLoaded ? formatTokens(balance) : '...',
       walletLoaded,
       refreshBalance,
       setBalance,

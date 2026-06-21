@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Check, Zap } from 'lucide-react';
 import PublicNav from '@/components/PublicNav';
 import Footer from '@/components/Footer';
-import { TOKEN_BUNDLES, AI_MODELS, IMAGE_MODELS, formatBalance } from '@tokenai/shared';
+import { TOKEN_BUNDLES, AI_MODELS, IMAGE_MODELS, formatTokens } from '@tokenai/shared';
 import type { ModelTier } from '@tokenai/shared';
 
 const TIER_STYLE: Record<ModelTier, string> = {
@@ -47,13 +47,13 @@ export default function PricingPage() {
                 <div className="mb-6">
                   <div className="text-gray-400 font-medium mb-1">{bundle.label}</div>
                   <div className="text-4xl font-bold text-white">${bundle.usd}</div>
-                  <div className="text-blue-400 font-semibold mt-1">${bundle.usd} added to your balance</div>
-                  <div className="text-xs text-gray-500 mt-1">Never expires · use any model</div>
+                  <div className="text-blue-400 font-semibold mt-1">{formatTokens(bundle.tokens)} credits</div>
+                  <div className="text-xs text-gray-500 mt-1">${(bundle.usd / bundle.tokens * 1_000_000).toFixed(2)} per 1M credits</div>
                 </div>
 
                 <ul className="space-y-2.5 mb-8 flex-1">
                   {[
-                    `~${Math.floor(bundle.nanodollars / (500 * 1500)).toLocaleString()} cheap-model messages`,
+                    `~${formatTokens(Math.floor(bundle.tokens / 1500))} cheap-model messages`,
                     'All 10 AI models',
                     'Vision + file + image generation',
                     'Free models included',
@@ -89,7 +89,7 @@ export default function PricingPage() {
                 <div className="col-span-5">Model</div>
                 <div className="col-span-2 text-center">Tier</div>
                 <div className="col-span-2 text-center">Rate</div>
-                <div className="col-span-3 text-right">~Cost / msg</div>
+                <div className="col-span-3 text-right">~Credits / msg</div>
               </div>
               {AI_MODELS.map((model, i) => (
                 <div key={model.id} className={`grid grid-cols-12 px-5 py-4 items-center ${i < AI_MODELS.length - 1 ? 'border-b border-white/5' : ''}`}>
@@ -108,10 +108,10 @@ export default function PricingPage() {
                     </span>
                   </div>
                   <div className="col-span-2 text-center font-semibold text-white">
-                    {model.nanodollarsPerToken === 0 ? 'Free' : `$${(model.nanodollarsPerToken / 1000).toFixed(model.nanodollarsPerToken < 1000 ? 2 : 0)}/1M`}
+                    {Number(model.multiplier) === 0 ? 'Free' : `${model.multiplier}×`}
                   </div>
                   <div className="col-span-3 text-right font-semibold text-green-400">
-                    {model.nanodollarsPerToken === 0 ? 'Free' : formatBalance(model.nanodollarsPerToken * 1500)}
+                    {Number(model.multiplier) === 0 ? '0' : formatTokens(model.multiplier * 1500)}
                   </div>
                 </div>
               ))}
@@ -139,7 +139,7 @@ export default function PricingPage() {
                   <div className="text-center">
                     <span className="text-xs font-medium bg-white/5 px-2.5 py-1 rounded-full">{m.quality}</span>
                   </div>
-                  <div className="text-right font-semibold text-green-400">{formatBalance(m.nanodollarsPerImage)}</div>
+                  <div className="text-right font-semibold text-green-400">{formatTokens(m.credits)}</div>
                 </div>
               ))}
             </div>
@@ -151,7 +151,7 @@ export default function PricingPage() {
             <div className="space-y-4">
               {[
                 { q: 'Do credits expire?', a: 'No. Your credits stay in your wallet until you use them — no expiry date ever.' },
-                { q: 'Why do models have different rates?', a: 'Each model has a different real cost. The rate (e.g. $18/1M) is the price per million tokens including our 2× markup over the raw API cost. You always pay fairly for exactly what you use.' },
+                { q: 'Why do models have different rates?', a: 'Each model has a different real cost. The rate (e.g. 50×) reflects how much more expensive a premium model like Claude Sonnet is versus the cheapest one. You always pay fairly for exactly what you use.' },
                 { q: 'What happens when I run out?', a: 'Paid models are disabled and you\'ll see a prompt to top up — but you can always keep chatting on the free models (with a daily limit). No charges happen automatically.' },
                 { q: 'Are there really free models?', a: 'Yes! Gemini 2.0 Flash, DeepSeek R1, and Llama 3.3 70B are free to use every day (subject to a daily message limit) — no credits deducted.' },
               ].map((item) => (

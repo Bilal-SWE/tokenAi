@@ -20,7 +20,7 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
 
   // Validate & resolve model (default to Gemini Flash Image)
   const imageModel = IMAGE_MODELS.find((m) => m.id === modelId) ?? IMAGE_MODELS[0];
-  const tokenCost = imageModel.nanodollarsPerImage;
+  const tokenCost = imageModel.credits;
 
   const supabase = getSupabaseAdmin();
 

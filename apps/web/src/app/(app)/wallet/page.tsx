@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { useWallet } from '@/context/WalletContext';
-import { formatBalance } from '@tokenai/shared';
+import { formatTokens } from '@tokenai/shared';
 import { Loader2, Plus } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -42,13 +42,13 @@ export default function WalletPage() {
       <div className="bg-blue-600 rounded-2xl p-6 text-white mb-6">
         <div className="text-sm text-blue-200 mb-1">Current balance</div>
         <div className="text-4xl font-bold">{formattedBalance}</div>
-        <div className="text-blue-200 text-sm mt-1">Available balance</div>
+        <div className="text-blue-200 text-sm mt-1">{balance.toLocaleString()} tokens</div>
         <Link
           href="/topup"
           className="mt-4 inline-flex items-center gap-1.5 bg-white text-blue-600 font-medium rounded-lg px-4 py-2 text-sm hover:bg-blue-50 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Add funds
+          Add tokens
         </Link>
       </div>
 
@@ -68,14 +68,14 @@ export default function WalletPage() {
               <div>
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{tx.description}</div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {new Date(tx.created_at).toLocaleDateString()} · Balance after: {formatBalance(tx.balance_after)}
+                  {new Date(tx.created_at).toLocaleDateString()} · Balance after: {formatTokens(tx.balance_after)}
                 </div>
               </div>
               <div className={clsx(
                 'text-sm font-semibold',
                 tx.amount > 0 ? 'text-green-600' : 'text-red-500'
               )}>
-                {tx.amount > 0 ? '+' : ''}{formatBalance(Math.abs(tx.amount))}
+                {tx.amount > 0 ? '+' : ''}{formatTokens(Math.abs(tx.amount))}
               </div>
             </div>
           ))}
