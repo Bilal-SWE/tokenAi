@@ -269,7 +269,18 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           });
           if (refundErr) console.error('Refund on upstream error failed', refundErr);
         }
-        await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: errorBody }) });
+        // Extract a human-readable message from OpenRouter's error response
+        let friendlyError = 'The AI provider returned an error. Please try again.';
+        try {
+          const parsed = JSON.parse(errorBody);
+          const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
+          if (response.status === 402 || msg.toLowerCase().includes('credits')) {
+            friendlyError = 'The AI service is temporarily unavailable. Please try again later or switch to a different model.';
+          } else if (msg) {
+            friendlyError = msg.length > 200 ? msg.slice(0, 200) + '…' : msg;
+          }
+        } catch { /* not JSON — keep default */ }
+        await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: friendlyError }) });
         return;
       }
 
