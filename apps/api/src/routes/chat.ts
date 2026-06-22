@@ -275,6 +275,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           const parsed = JSON.parse(errorBody);
           const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
           if (response.status === 402 || msg.toLowerCase().includes('credits')) {
+            console.error('OpenRouter credits exhausted — add credits at openrouter.ai/credits', { userId, model, status: response.status });
             friendlyError = 'The AI service is temporarily unavailable. Please try again later or switch to a different model.';
           } else if (msg) {
             friendlyError = msg.length > 200 ? msg.slice(0, 200) + '…' : msg;

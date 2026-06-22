@@ -636,9 +636,9 @@ export default function ChatInterface({
         ));
       } catch (err) {
         const status = (err as { status?: number }).status;
+        const msg = (err as Error).message || '';
         if (status === 402) setError('Insufficient tokens. Top up to continue.');
-        else if (status === 503) setError('Image generation is not configured.');
-        else setError('Image generation failed. Please try again.');
+        else setError(msg || 'Image generation failed. Please try again.');
         setMessages((prev) => prev.map((m) => m.streaming ? { ...m, streaming: false, content: '' } : m));
       } finally {
         setGenerating(false);
@@ -822,7 +822,12 @@ export default function ChatInterface({
       if (status === 402) setError('Insufficient credits. Top up to continue — or switch to a free model.');
       else if (status === 400) setError('This model is no longer available. Please select a different model from the menu.');
       else if (status === 429) setError('Daily free limit reached. Switch to a paid model or try again tomorrow.');
-      else if (status === 502) setError(`AI provider error: ${(err as Error).message}`);
+      else if (status === 502) {
+        // Strip internal error keys (e.g. "upstream_error: ") before showing to user
+        const raw = (err as Error).message || '';
+        const cleaned = raw.replace(/^[\w_]+:\s*/i, '');
+        setError(cleaned || 'The AI provider returned an error. Please try again.');
+      }
       else setError('Connection lost. The response may be incomplete.');
       setMessages((prev) => prev.map((m) => m.streaming ? { ...m, streaming: false } : m));
     } finally {

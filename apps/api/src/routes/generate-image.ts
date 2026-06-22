@@ -37,16 +37,36 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
   try {
     let imageUrl: string | undefined;
 
+    const upstreamHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://tokenai.app',
+      'X-Title': 'TokenAI',
+    };
+
+    /** Parse an OpenRouter error response and return a user-facing message + HTTP status. */
+    async function parseUpstreamError(response: Response): Promise<{ status: 400 | 503 | 502; message: string }> {
+      const body = await response.text().catch(() => '');
+      console.error('Image generation upstream error', { userId, model: imageModel.id, status: response.status, body: body.slice(0, 300) });
+      try {
+        const parsed = JSON.parse(body);
+        const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
+        if (response.status === 402 || msg.toLowerCase().includes('credit')) {
+          return { status: 503, message: 'Image generation is temporarily unavailable. Please try again later.' };
+        }
+        if (response.status === 400 && (msg.includes('endpoint') || msg.includes('model'))) {
+          return { status: 400, message: 'This image model is not available. Please select a different one.' };
+        }
+        if (msg) return { status: 502, message: msg.slice(0, 200) };
+      } catch { /* not JSON */ }
+      return { status: 502, message: 'Image generation failed. Please try again.' };
+    }
+
     if (imageModel.apiType === 'chat-completion') {
       // ── Gemini-style: chat/completions with modalities ──────────────────
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://tokenai.app',
-          'X-Title': 'TokenAI',
-        },
+        headers: upstreamHeaders,
         body: JSON.stringify({
           model: imageModel.id,
           messages: [{ role: 'user', content: prompt.trim() }],
@@ -55,9 +75,8 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       });
 
       if (!response.ok) {
-        const detail = await response.text();
-        console.error('Image generation upstream error', { userId, model: imageModel.id, status: response.status, detail: detail.slice(0, 200) });
-        return c.json({ error: 'Image generation failed' }, 502);
+        const { status, message } = await parseUpstreamError(response);
+        return c.json({ error: message }, status);
       }
 
       const result = await response.json() as {
@@ -69,12 +88,7 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       // ── DALL-E / FLUX style: images/generations endpoint ─────────────────
       const response = await fetch('https://openrouter.ai/api/v1/images/generations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://tokenai.app',
-          'X-Title': 'TokenAI',
-        },
+        headers: upstreamHeaders,
         body: JSON.stringify({
           model: imageModel.id,
           prompt: prompt.trim(),
@@ -84,9 +98,8 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       });
 
       if (!response.ok) {
-        const detail = await response.text();
-        console.error('Image generation upstream error', { userId, model: imageModel.id, status: response.status, detail: detail.slice(0, 200) });
-        return c.json({ error: 'Image generation failed' }, 502);
+        const { status, message } = await parseUpstreamError(response);
+        return c.json({ error: message }, status);
       }
 
       const result = await response.json() as {
