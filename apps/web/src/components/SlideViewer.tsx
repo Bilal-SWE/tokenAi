@@ -74,69 +74,186 @@ export default function SlideViewer({ content }: { content: string }) {
   async function downloadPptx() {
     setDownloading(true);
     try {
-      // Dynamic import so pptxgenjs doesn't bloat the initial bundle
       const PptxGenJS = (await import('pptxgenjs')).default;
       const pptx = new PptxGenJS();
       pptx.layout = 'LAYOUT_16x9';
       pptx.title = title;
 
-      // Accent colours matching slideColors
-      const accentColors = [
-        '2563EB', '7C3AED', '059669', 'EA580C',
-        '0D9488', 'E11D48', '0284C7', '4F46E5',
-      ];
+      // ── Design tokens ───────────────────────────────────────────────────
+      const BG       = '0F172A'; // slate-900 — consistent dark background
+      const SURFACE  = '1E293B'; // slate-800 — card / panel background
+      const ACCENT   = '14B8A6'; // teal-500  — primary accent
+      const ACCENT2  = '818CF8'; // indigo-400 — secondary accent
+      const TEXT_HI  = 'F1F5F9'; // slate-100 — primary text
+      const TEXT_LO  = '94A3B8'; // slate-400 — secondary / meta text
 
-      slides.forEach((s, i) => {
-        const slide = pptx.addSlide();
-        const accent = accentColors[i % accentColors.length];
-
-        // Background
-        slide.addShape(pptx.ShapeType.rect, {
-          x: 0, y: 0, w: '100%', h: '100%',
-          fill: { color: accent },
-        });
-
-        // Slide number badge
-        slide.addText(`${i + 1} / ${slides.length}`, {
-          x: 0.3, y: 0.2, w: 1.5, h: 0.3,
-          fontSize: 9, color: 'FFFFFF', bold: false,
-          transparency: 40,
-        });
-
-        // Title
-        slide.addText(s.title, {
-          x: 0.5, y: 0.6, w: 9, h: 1.0,
-          fontSize: 28, bold: true, color: 'FFFFFF',
-          wrap: true,
-        });
-
-        // Divider line
-        slide.addShape(pptx.ShapeType.rect, {
-          x: 0.5, y: 1.7, w: 9, h: 0.03,
-          fill: { color: 'FFFFFF', transparency: 60 },
-          line: { color: 'FFFFFF', transparency: 60 },
-        });
-
-        // Content: strip markdown syntax for clean .pptx text
-        const plainText = s.content
+      /** Strip markdown syntax and return plain text */
+      function plain(md: string) {
+        return md
           .replace(/^#{1,6}\s+/gm, '')
           .replace(/\*\*(.+?)\*\*/g, '$1')
           .replace(/\*(.+?)\*/g, '$1')
-          .replace(/^[-*+]\s+/gm, '• ')
-          .replace(/^\d+\.\s+/gm, (m) => m)
+          .replace(/`(.+?)`/g, '$1')
           .trim();
+      }
 
-        slide.addText(plainText, {
-          x: 0.5, y: 1.85, w: 9, h: 4.0,
-          fontSize: 14, color: 'FFFFFF',
-          transparency: 10,
+      /** Parse content block into individual bullet strings */
+      function parseBullets(md: string): string[] {
+        return md
+          .split('\n')
+          .map((l) => l.replace(/^[-*+]\s+/, '').replace(/^\d+\.\s+/, '').replace(/\*\*(.+?)\*\*/g, '$1').trim())
+          .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('>'));
+      }
+
+      // ── Slide 0: Title slide ─────────────────────────────────────────────
+      {
+        const tSlide = pptx.addSlide();
+
+        // Full dark background
+        tSlide.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: '100%', h: '100%',
+          fill: { color: BG }, line: { color: BG },
+        });
+
+        // Left accent bar
+        tSlide.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: 0.18, h: '100%',
+          fill: { color: ACCENT }, line: { color: ACCENT },
+        });
+
+        // Decorative circle (top-right)
+        tSlide.addShape(pptx.ShapeType.ellipse, {
+          x: 7.8, y: -1.2, w: 3.5, h: 3.5,
+          fill: { color: ACCENT2, transparency: 85 },
+          line: { color: ACCENT2, transparency: 85 },
+        });
+
+        // Platform label
+        tSlide.addText('TokenAI', {
+          x: 0.55, y: 0.9, w: 4, h: 0.3,
+          fontSize: 10, bold: true, color: ACCENT,
+          charSpacing: 3,
+        });
+
+        // Main title
+        tSlide.addText(title, {
+          x: 0.55, y: 1.3, w: 8.5, h: 2.2,
+          fontSize: 42, bold: true, color: TEXT_HI,
           wrap: true, valign: 'top',
         });
 
-        // Speaker notes
-        if (s.notes) {
-          slide.addNotes(s.notes);
+        // Divider
+        tSlide.addShape(pptx.ShapeType.rect, {
+          x: 0.55, y: 3.6, w: 1.2, h: 0.06,
+          fill: { color: ACCENT }, line: { color: ACCENT },
+        });
+
+        // Subtitle from first slide's first bullet
+        const firstBullets = parseBullets(slides[0]?.content ?? '');
+        if (firstBullets[0]) {
+          tSlide.addText(firstBullets[0], {
+            x: 0.55, y: 3.85, w: 8, h: 0.5,
+            fontSize: 14, color: TEXT_LO, italic: true, wrap: true,
+          });
         }
+
+        // Slide count badge
+        tSlide.addText(`${slides.length} slides`, {
+          x: 8.5, y: 6.8, w: 1.5, h: 0.3,
+          fontSize: 9, color: TEXT_LO, align: 'right',
+        });
+      }
+
+      // ── Content slides ───────────────────────────────────────────────────
+      slides.forEach((s, i) => {
+        const sl = pptx.addSlide();
+        const bullets = parseBullets(s.content);
+        const isLast = i === slides.length - 1;
+
+        // Background
+        sl.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: '100%', h: '100%',
+          fill: { color: BG }, line: { color: BG },
+        });
+
+        // Top header panel
+        sl.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: '100%', h: 1.35,
+          fill: { color: SURFACE }, line: { color: SURFACE },
+        });
+
+        // Accent left strip in header
+        sl.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: 0.12, h: 1.35,
+          fill: { color: isLast ? ACCENT2 : ACCENT },
+          line:  { color: isLast ? ACCENT2 : ACCENT },
+        });
+
+        // Slide number (top-right)
+        sl.addText(`${i + 1} / ${slides.length}`, {
+          x: 8.5, y: 0.1, w: 1.5, h: 0.3,
+          fontSize: 9, color: TEXT_LO, align: 'right',
+        });
+
+        // Slide title
+        sl.addText(plain(s.title), {
+          x: 0.4, y: 0.25, w: 8.2, h: 0.85,
+          fontSize: 26, bold: true, color: isLast ? ACCENT2 : ACCENT,
+          wrap: true, valign: 'middle',
+        });
+
+        // Content area: render bullets as individual rows
+        const maxBullets = Math.min(bullets.length, 6);
+        const rowH = 0.72;
+        const startY = 1.55;
+
+        bullets.slice(0, maxBullets).forEach((bullet, bi) => {
+          const y = startY + bi * rowH;
+
+          // Row background (alternating)
+          if (bi % 2 === 0) {
+            sl.addShape(pptx.ShapeType.rect, {
+              x: 0.3, y: y - 0.06, w: 9.4, h: rowH - 0.06,
+              fill: { color: SURFACE, transparency: 30 },
+              line: { color: SURFACE, transparency: 50 },
+              rectRadius: 0.05,
+            });
+          }
+
+          // Numbered badge
+          sl.addShape(pptx.ShapeType.ellipse, {
+            x: 0.38, y: y + 0.03, w: 0.42, h: 0.42,
+            fill: { color: isLast ? ACCENT2 : ACCENT, transparency: bi > 0 ? 20 : 0 },
+            line: { color: isLast ? ACCENT2 : ACCENT, transparency: bi > 0 ? 20 : 0 },
+          });
+          sl.addText(`${bi + 1}`, {
+            x: 0.38, y: y + 0.03, w: 0.42, h: 0.42,
+            fontSize: 10, bold: true, color: BG,
+            align: 'center', valign: 'middle',
+          });
+
+          // Bullet text
+          sl.addText(bullet, {
+            x: 0.9, y: y, w: 8.7, h: rowH - 0.1,
+            fontSize: 13.5, color: TEXT_HI,
+            wrap: true, valign: 'middle',
+          });
+        });
+
+        // If fewer than 3 bullets, add a quote/note section
+        if (bullets.length < 3 && s.notes) {
+          const noteY = startY + maxBullets * rowH + 0.2;
+          sl.addShape(pptx.ShapeType.rect, {
+            x: 0.3, y: noteY, w: 0.06, h: 0.9,
+            fill: { color: ACCENT }, line: { color: ACCENT },
+          });
+          sl.addText(plain(s.notes).slice(0, 180), {
+            x: 0.55, y: noteY, w: 9.1, h: 0.9,
+            fontSize: 12, color: TEXT_LO, italic: true, wrap: true,
+          });
+        }
+
+        if (s.notes) sl.addNotes(s.notes);
       });
 
       await pptx.writeFile({ fileName: `${title}.pptx` });
