@@ -15,7 +15,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   const userId = c.get('userId') as string;
   const body = await c.req.json<SendMessageRequest>();
   const { conversationId: inputConvId, content, model, imageUrl, fileText, fileData, fileName,
-          systemPrompt, contextMessages: incomingContextMessages, skipPersist } = body;
+          systemPrompt, contextMessages: incomingContextMessages, skipPersist, webSearch } = body;
 
   if (!content || !model) {
     return c.json({ error: 'content and model are required' }, 400);
@@ -244,15 +244,18 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           model,
           messages: finalMessages,
           stream: true,
-          // *** THIS IS THE KEY FIX ***
           // Tell the model exactly how many tokens it is allowed to generate.
           // For paid models this is derived from the user's actual wallet balance,
           // so the model CANNOT generate more tokens than the user can pay for.
           max_tokens: maxOutputTokens,
-          // Native PDF processing
-          ...(fileData
-            ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] }
-            : {}),
+          // Merge plugins: PDF parser and/or web search
+          ...(() => {
+            const plugins = [
+              ...(fileData ? [{ id: 'file-parser', pdf: { engine: 'native' } }] : []),
+              ...(webSearch ? [{ id: 'web', max_results: 5 }] : []),
+            ];
+            return plugins.length > 0 ? { plugins } : {};
+          })(),
         }),
       });
 

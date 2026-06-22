@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Send, AlertTriangle, Loader2, Paperclip, Sparkles,
   X, Image as ImageIcon, FileText, MessageSquare, ChevronDown, Check, Copy, Pencil,
-  Mic, MicOff, Link2, LayoutTemplate, Reply, Scale,
+  Mic, MicOff, Link2, LayoutTemplate, Reply, Scale, Globe,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch, apiStream } from '@/lib/api';
@@ -261,6 +261,7 @@ export default function ChatInterface({
   const [ratePopup, setRatePopup] = useState<AIModel | null>(null);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const { isAdmin } = useApp();
+  const [webSearch, setWebSearch] = useState(false);
   const [imageModel, setImageModel] = useState<ImageModelId>(IMAGE_MODELS[0].id);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const imageMenuRef = useRef<HTMLDivElement>(null);
@@ -791,6 +792,7 @@ export default function ChatInterface({
           fileName: fileSnapshot?.kind === 'pdf' ? fileSnapshot.name : undefined,
           systemPrompt: isPresentation ? PRESENTATION_SYSTEM_PROMPT : undefined,
           contextMessages: linkedContext ? linkedContext.messages : undefined,
+          webSearch: webSearch && !isPresentation,
         },
         (chunk) => {
           const delta = (chunk as { choices?: Array<{ delta?: { content?: string } }> })
@@ -1566,6 +1568,24 @@ export default function ChatInterface({
                       </button>
                     )}
 
+
+                    {/* Web Search toggle */}
+                    {!isGenerateMode && !isPresentationMode && (
+                      <button
+                        onClick={() => setWebSearch((v) => !v)}
+                        title={webSearch ? 'Web search ON — click to disable' : 'Enable web search'}
+                        className={clsx(
+                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                          webSearch
+                            ? 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700'
+                            : 'border-gray-200 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700'
+                        )}
+                        style={{ color: webSearch ? undefined : 'var(--text-secondary)' }}
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Web</span>
+                      </button>
+                    )}
 
                     {/* Feature 5: Link context conversation */}
                     {!isGenerateMode && (

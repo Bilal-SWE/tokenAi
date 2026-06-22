@@ -231,6 +231,8 @@ export interface SendMessageRequest {
   contextMessages?: { role: string; content: string }[];
   /** Compare mode: stream the AI response but skip saving to DB */
   skipPersist?: boolean;
+  /** Enable OpenRouter web search plugin for this request */
+  webSearch?: boolean;
 }
 
 export interface SendMessageResponse {
