@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { WalletProvider, useWallet } from '@/context/WalletContext';
+import { AppProvider, useApp } from '@/context/AppContext';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
 import { formatTokens } from '@tokenai/shared';
 import type { ConversationSummary } from '@tokenai/shared';
@@ -272,7 +273,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin, setIsAdmin } = useApp();
   const router = useRouter();
   const { setBalance, refreshBalance } = useWallet();
   const { t } = useAppPreferences();
@@ -287,7 +288,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {})
       .finally(() => setLoadingConversations(false));
-  }, [setBalance, refreshBalance]);
+  }, [setBalance, refreshBalance, setIsAdmin]);
 
   function handleNewChat() {
     router.push('/chat');
@@ -362,8 +363,10 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <WalletProvider>
-      <AppLayoutInner>{children}</AppLayoutInner>
-    </WalletProvider>
+    <AppProvider>
+      <WalletProvider>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </WalletProvider>
+    </AppProvider>
   );
 }

@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { apiFetch, apiStream } from '@/lib/api';
 import { useWallet } from '@/context/WalletContext';
+import { useApp } from '@/context/AppContext';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
 import MarkdownMessage from './MarkdownMessage';
 import SlideViewer from './SlideViewer';
@@ -259,7 +260,7 @@ export default function ChatInterface({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [ratePopup, setRatePopup] = useState<AIModel | null>(null);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin } = useApp();
   const [imageModel, setImageModel] = useState<ImageModelId>(IMAGE_MODELS[0].id);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const imageMenuRef = useRef<HTMLDivElement>(null);
@@ -293,10 +294,6 @@ export default function ChatInterface({
   const router = useRouter();
   const { balance, setBalance, walletLoaded } = useWallet();
 
-  // Admin check — silently determines if current user is admin
-  useEffect(() => {
-    apiFetch('/api/admin/check').then(() => setIsAdmin(true)).catch(() => setIsAdmin(false));
-  }, []);
 
   // Close model dropdown on outside click
   useEffect(() => {

@@ -9,6 +9,7 @@ create table public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   email        text not null,
   full_name    text,
+  is_admin     boolean not null default false,
   banned       boolean not null default false,
   created_at   timestamptz default now(),
   updated_at   timestamptz default now()
@@ -214,6 +215,7 @@ $$;
 
 -- ─── MIGRATION CHECKLIST (run in order if upgrading an existing DB) ──────────
 -- 1. alter table public.profiles add column if not exists banned boolean not null default false;
--- 2. Run the get_user_message_counts() function above.
--- 3. Run the refund_tokens() function above.
--- 4. alter table public.wallets add constraint balance_non_negative check (balance >= 0);
+-- 2. alter table public.profiles add column if not exists is_admin boolean not null default false;
+-- 3. Run the get_user_message_counts() function above.
+-- 4. Run the refund_tokens() function above.
+-- 5. alter table public.wallets add constraint balance_non_negative check (balance >= 0);

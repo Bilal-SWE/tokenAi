@@ -70,7 +70,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 w-full max-w-md p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Create account</h1>
-        <p className="text-gray-500 text-sm mb-6">Get 5K free tokens on signup</p>
+        <p className="text-gray-500 text-sm mb-6">Get 500K free tokens on signup</p>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
