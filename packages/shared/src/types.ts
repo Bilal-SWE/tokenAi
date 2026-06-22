@@ -20,15 +20,14 @@ export type ModelTier = 'free' | 'standard' | 'premium' | 'ultra';
 // Model definitions
 //
 // multiplier  = credits charged per 1 AI token.
-//               Normalized so cheapest paid model = 1×.
-//               Formula: ceil(completion_cost_per_1M / 1.5)
 //               Free models = 0 (limited by FREE_DAILY_MESSAGE_LIMIT).
 //
-// costPer1MTokens = blended real OpenRouter cost (input+output avg), $ per 1M.
-//                   Source: openrouter.ai/api/v1/models  (verified 2026-06-20)
+// Pricing formula (Standard bundle: $10 → 15M credits = $0.667/1M per mult):
+//   multiplier = ceil(1.5 × OR_cost_per_1M / 0.667)
+//   → targets ~50% margin on every paid model.
 //
-// All model IDs verified against OpenRouter API — only IDs that actually
-// exist are listed here.
+// costPer1MTokens = blended OpenRouter cost (input+output avg), $ per 1M.
+//                   Source: openrouter.ai/api/v1/models  (verified 2026-06-22)
 // ───────────────────────────────────────────────────────────
 export const AI_MODELS = [
 
@@ -57,7 +56,7 @@ export const AI_MODELS = [
   },
 
   // ─── Google Gemini ─────────────────────────────────────────────────────
-  // gemini-2.5-flash-lite:  $0.10 input / $0.40 output per 1M  → mult 1
+  // gemini-2.5-flash-lite:  $0.10 in / $0.40 out → blended $0.25  → mult 1
   {
     id: 'google/gemini-2.5-flash-lite',
     label: 'Gemini 2.5 Flash Lite',
@@ -69,33 +68,33 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Cheapest',
   },
-  // gemini-3.5-flash:  $1.50 input / $9.00 output per 1M  → mult 6
+  // gemini-3.5-flash:  $1.50 in / $9.00 out → blended $5.25  → mult 12
   {
     id: 'google/gemini-3.5-flash',
     label: 'Gemini 3.5 Flash',
     provider: 'Google',
     tier: 'standard',
     category: 'fast',
-    multiplier: 6,
+    multiplier: 12,
     costPer1MTokens: 5.25,
     supportsVision: true,
     badge: 'Fast',
   },
-  // gemini-2.5-pro:  $1.25 input / $10.00 output per 1M  → mult 7
+  // gemini-2.5-pro:  $1.25 in / $10.00 out → blended $5.63  → mult 13
   {
     id: 'google/gemini-2.5-pro',
     label: 'Gemini 2.5 Pro',
     provider: 'Google',
     tier: 'premium',
     category: 'best',
-    multiplier: 7,
+    multiplier: 13,
     costPer1MTokens: 5.63,
     supportsVision: true,
     badge: 'Best',
   },
 
   // ─── OpenAI GPT ────────────────────────────────────────────────────────
-  // gpt-4o-mini:  $0.15 input / $0.60 output per 1M  → mult 1
+  // gpt-4o-mini:  $0.15 in / $0.60 out → blended $0.38  → mult 1
   {
     id: 'openai/gpt-4o-mini',
     label: 'GPT-4o Mini',
@@ -107,64 +106,64 @@ export const AI_MODELS = [
     supportsVision: true,
     badge: 'Cheapest',
   },
-  // gpt-4o:  $2.50 input / $10.00 output per 1M  → mult 7
+  // gpt-4o:  $2.50 in / $10.00 out → blended $6.25  → mult 15
   {
     id: 'openai/gpt-4o',
     label: 'GPT-4o',
     provider: 'OpenAI',
     tier: 'premium',
     category: 'fast',
-    multiplier: 7,
+    multiplier: 15,
     costPer1MTokens: 6.25,
     supportsVision: true,
     badge: 'Fast',
   },
-  // gpt-5.5:  $5.00 input / $30.00 output per 1M  → mult 20
+  // gpt-5.5:  $5.00 in / $30.00 out → blended $17.50  → mult 40
   {
     id: 'openai/gpt-5.5',
     label: 'GPT-5.5',
     provider: 'OpenAI',
     tier: 'ultra',
     category: 'best',
-    multiplier: 20,
+    multiplier: 40,
     costPer1MTokens: 17.50,
     supportsVision: true,
     badge: 'Best',
   },
 
   // ─── Anthropic Claude ──────────────────────────────────────────────────
-  // claude-haiku-4.5:  $1.00 input / $5.00 output per 1M  → mult 4
+  // claude-haiku-4.5:  $1.00 in / $5.00 out → blended $3.00  → mult 7
   {
     id: 'anthropic/claude-haiku-4.5',
     label: 'Claude Haiku 4.5',
     provider: 'Anthropic',
     tier: 'standard',
     category: 'cheap',
-    multiplier: 4,
+    multiplier: 7,
     costPer1MTokens: 3.00,
     supportsVision: true,
     badge: 'Cheapest',
   },
-  // claude-sonnet-4.5:  $3.00 input / $15.00 output per 1M  → mult 10
+  // claude-sonnet-4.5:  $3.00 in / $15.00 out → blended $9.00  → mult 21
   {
     id: 'anthropic/claude-sonnet-4.5',
     label: 'Claude Sonnet 4.5',
     provider: 'Anthropic',
     tier: 'premium',
     category: 'fast',
-    multiplier: 10,
+    multiplier: 21,
     costPer1MTokens: 9.00,
     supportsVision: true,
     badge: 'Fast',
   },
-  // claude-opus-4.8:  $5.00 input / $25.00 output per 1M  → mult 17
+  // claude-opus-4.8:  $5.00 in / $25.00 out → blended $15.00  → mult 34
   {
     id: 'anthropic/claude-opus-4.8',
     label: 'Claude Opus 4.8',
     provider: 'Anthropic',
     tier: 'ultra',
     category: 'best',
-    multiplier: 17,
+    multiplier: 34,
     costPer1MTokens: 15.00,
     supportsVision: true,
     badge: 'Best',

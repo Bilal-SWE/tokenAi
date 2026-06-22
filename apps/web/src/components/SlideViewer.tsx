@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, LayoutTemplate, Copy, Check, AlignLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutTemplate, Copy, Check, AlignLeft, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
@@ -59,6 +59,7 @@ export default function SlideViewer({ content }: { content: string }) {
   const [showNotes, setShowNotes] = useState(false);
   const [rawView, setRawView] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const { title, slides } = parseSlides(content);
   const slide = slides[current];
@@ -68,6 +69,80 @@ export default function SlideViewer({ content }: { content: string }) {
     await navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function downloadPptx() {
+    setDownloading(true);
+    try {
+      // Dynamic import so pptxgenjs doesn't bloat the initial bundle
+      const PptxGenJS = (await import('pptxgenjs')).default;
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_16x9';
+      pptx.title = title;
+
+      // Accent colours matching slideColors
+      const accentColors = [
+        '2563EB', '7C3AED', '059669', 'EA580C',
+        '0D9488', 'E11D48', '0284C7', '4F46E5',
+      ];
+
+      slides.forEach((s, i) => {
+        const slide = pptx.addSlide();
+        const accent = accentColors[i % accentColors.length];
+
+        // Background
+        slide.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: '100%', h: '100%',
+          fill: { color: accent },
+        });
+
+        // Slide number badge
+        slide.addText(`${i + 1} / ${slides.length}`, {
+          x: 0.3, y: 0.2, w: 1.5, h: 0.3,
+          fontSize: 9, color: 'FFFFFF', bold: false,
+          transparency: 40,
+        });
+
+        // Title
+        slide.addText(s.title, {
+          x: 0.5, y: 0.6, w: 9, h: 1.0,
+          fontSize: 28, bold: true, color: 'FFFFFF',
+          wrap: true,
+        });
+
+        // Divider line
+        slide.addShape(pptx.ShapeType.rect, {
+          x: 0.5, y: 1.7, w: 9, h: 0.03,
+          fill: { color: 'FFFFFF', transparency: 60 },
+          line: { color: 'FFFFFF', transparency: 60 },
+        });
+
+        // Content: strip markdown syntax for clean .pptx text
+        const plainText = s.content
+          .replace(/^#{1,6}\s+/gm, '')
+          .replace(/\*\*(.+?)\*\*/g, '$1')
+          .replace(/\*(.+?)\*/g, '$1')
+          .replace(/^[-*+]\s+/gm, '• ')
+          .replace(/^\d+\.\s+/gm, (m) => m)
+          .trim();
+
+        slide.addText(plainText, {
+          x: 0.5, y: 1.85, w: 9, h: 4.0,
+          fontSize: 14, color: 'FFFFFF',
+          transparency: 10,
+          wrap: true, valign: 'top',
+        });
+
+        // Speaker notes
+        if (s.notes) {
+          slide.addNotes(s.notes);
+        }
+      });
+
+      await pptx.writeFile({ fileName: `${title}.pptx` });
+    } finally {
+      setDownloading(false);
+    }
   }
 
   if (rawView) {
@@ -81,6 +156,14 @@ export default function SlideViewer({ content }: { content: string }) {
               className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 transition-colors"
             >
               <LayoutTemplate className="w-3 h-3" /> Slides view
+            </button>
+            <button
+              onClick={downloadPptx}
+              disabled={downloading}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              {downloading ? 'Exporting…' : '.pptx'}
             </button>
             <button
               onClick={copyAll}
@@ -110,6 +193,14 @@ export default function SlideViewer({ content }: { content: string }) {
             className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 transition-colors"
           >
             <AlignLeft className="w-3 h-3" /> Markdown
+          </button>
+          <button
+            onClick={downloadPptx}
+            disabled={downloading}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            {downloading ? 'Exporting…' : 'Download .pptx'}
           </button>
           <button
             onClick={copyAll}
