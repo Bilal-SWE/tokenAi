@@ -14,6 +14,13 @@ function isAdminEmail(email: string): boolean {
 
 async function adminGuard(c: Context<AdminEnv>, next: () => Promise<void>) {
   const userId = c.get('userId');
+  // Fast path: check ADMIN_EMAILS using the verified JWT email (no DB query needed).
+  const userEmail = (c.get('userEmail') as string) || '';
+  if (userEmail && isAdminEmail(userEmail)) {
+    await next();
+    return;
+  }
+  // Slow path: fall back to the is_admin column in the profiles table.
   const supabase = getSupabaseAdmin();
   const { data: profile } = await supabase.from('profiles').select('email, is_admin').eq('id', userId).single();
   if (!profile) return c.json({ error: 'Forbidden' }, 403);

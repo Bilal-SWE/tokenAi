@@ -19,5 +19,6 @@ export async function authMiddleware(c: Context<{ Variables: AppVariables }>, ne
 
   c.set('userId', user.id);
   c.set('userToken', token);
+  c.set('userEmail', user.email ?? '');
   await next();
 }

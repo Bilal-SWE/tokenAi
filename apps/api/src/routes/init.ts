@@ -11,12 +11,14 @@ export const initRouter = new Hono<{ Variables: AppVariables }>();
 // This replaces 3 separate requests (each with its own auth verification) with 1.
 initRouter.get('/', authMiddleware, async (c) => {
   const userId = c.get('userId') as string;
+  // Email comes directly from the verified JWT — reliable even if the profile row is missing.
+  const userEmail = (c.get('userEmail') as string) || '';
   const supabase = getSupabaseAdmin();
 
   const [
     { data: conversations },
     { data: wallet },
-    { data: profile },
+    { data: profile, error: profileError },
   ] = await Promise.all([
     supabase
       .from('conversations')
@@ -36,9 +38,15 @@ initRouter.get('/', authMiddleware, async (c) => {
       .single(),
   ]);
 
+  if (profileError) {
+    console.error('init: profile query failed', { userId, error: profileError.message });
+  }
+
   const balance = wallet?.balance ?? 0;
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase());
-  const isAdmin = profile?.is_admin === true || adminEmails.includes((profile?.email ?? '').toLowerCase());
+  // Use the JWT email as the fallback so admin detection works even if the profile row is missing.
+  const effectiveEmail = (profile?.email || userEmail).toLowerCase();
+  const isAdmin = profile?.is_admin === true || adminEmails.includes(effectiveEmail);
 
   return c.json({
     conversations: conversations || [],
