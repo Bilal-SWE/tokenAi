@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, LayoutTemplate, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Download, LayoutTemplate, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-/** Extract the // TITLE: comment from the first line, fall back to generic. */
 function extractTitle(code: string): string {
   const match = code.match(/^\/\/\s*TITLE:\s*(.+)$/m);
   return match ? match[1].trim() : 'Presentation';
 }
 
-/** Strip any accidental markdown fences the AI may have added. */
 function stripFences(code: string): string {
   return code
     .replace(/^```(?:javascript|js|typescript|ts)?\s*\n?/im, '')
@@ -25,8 +23,6 @@ async function buildAndDownload(rawContent: string): Promise<string> {
   const code = stripFences(rawContent);
   const title = extractTitle(code);
 
-  // Execute the AI-generated pptxgenjs code in an async context.
-  // The AI has access to `pptx` and `PptxGenJS` — nothing else.
   // eslint-disable-next-line no-new-func
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
     ...args: string[]
@@ -58,7 +54,6 @@ export default function SlideViewer({ content }: { content: string }) {
     }
   }
 
-  // Auto-download once on first mount (streaming just finished)
   useEffect(() => {
     if (didRun.current) return;
     didRun.current = true;
@@ -80,7 +75,11 @@ export default function SlideViewer({ content }: { content: string }) {
             {status === 'done' ? title : 'PowerPoint Presentation'}
           </p>
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {status === 'building' ? 'Generating file…' : status === 'done' ? '.pptx · Ready' : 'Error'}
+            {status === 'building'
+              ? 'Building your .pptx file…'
+              : status === 'done'
+              ? '.pptx · Ready to open in PowerPoint'
+              : 'Build failed'}
           </p>
         </div>
       </div>
@@ -90,7 +89,7 @@ export default function SlideViewer({ content }: { content: string }) {
         {status === 'building' && (
           <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
             <Loader2 className="w-4 h-4 animate-spin text-teal-600 flex-shrink-0" />
-            <span>Building your PowerPoint file…</span>
+            <span>Building PowerPoint file…</span>
           </div>
         )}
 
@@ -98,7 +97,7 @@ export default function SlideViewer({ content }: { content: string }) {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center flex-shrink-0">
-                <Download className="w-4 h-4 text-teal-600" />
+                <CheckCircle2 className="w-4 h-4 text-teal-600" />
               </div>
               <div>
                 <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -113,7 +112,7 @@ export default function SlideViewer({ content }: { content: string }) {
               onClick={run}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:text-teal-300 dark:bg-teal-900/30 dark:hover:bg-teal-900/50 transition-colors"
             >
-              <RefreshCw className="w-3 h-3" /> Download again
+              <Download className="w-3 h-3" /> Download again
             </button>
           </div>
         )}
@@ -127,7 +126,7 @@ export default function SlideViewer({ content }: { content: string }) {
                   Failed to build the file
                 </p>
                 {errorMsg && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5 font-mono">{errorMsg}</p>
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5 font-mono break-all">{errorMsg}</p>
                 )}
               </div>
             </div>

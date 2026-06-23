@@ -64,74 +64,6 @@ interface Props {
   placeholder?: string;
 }
 
-// ─── Presentation system prompt ──────────────────────────────────────────────
-
-const PRESENTATION_SYSTEM_PROMPT = `You are a world-class PowerPoint designer. Generate JavaScript code using the pptxgenjs library to create a stunning, unique presentation.
-
-OUTPUT: Raw JavaScript code ONLY — no markdown fences, no explanation, no comments except // TITLE: on line 1.
-
-FORMAT — first line must be:
-// TITLE: <presentation title here>
-
-Then the slide code. The variable \`pptx\` is already initialized (PptxGenJS instance, layout LAYOUT_16x9 set).
-Do NOT call new PptxGenJS() and do NOT call pptx.writeFile().
-
-═══ PPTXGENJS API ═══
-const slide = pptx.addSlide();
-slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:'100%', fill:{color:'1E293B'}, line:{color:'1E293B'} });
-slide.addShape(pptx.ShapeType.ellipse, { x:1, y:1, w:2, h:2, fill:{color:'14B8A6', transparency:40}, line:{color:'14B8A6', transparency:40} });
-slide.addText('text', { x:0.5, y:1, w:9, h:1.2, fontSize:32, bold:true, color:'FFFFFF', align:'center', valign:'middle', wrap:true });
-slide.addNotes('speaker notes text');
-Colors: 6-char hex, no # sign (e.g. 'FFFFFF', '1E293B', '14B8A6')
-Coordinates in inches: x 0-10, y 0-7.5. Use w:'100%' h:'100%' for full slide fill.
-transparency: 0 (solid) to 100 (invisible). rectRadius for rounded corners.
-
-═══ SLIDE COUNT ═══
-Choose the count based on topic complexity:
-- Simple topic: 8-10 slides
-- Medium topic: 11-14 slides
-- Complex topic: 15-18 slides
-
-═══ CRITICAL DESIGN RULES ═══
-1. EVERY slide must have a completely different layout, color scheme, and visual design
-2. Use AT LEAST 6 different background colors across the deck — never the same BG twice in a row
-3. Vary font sizes dramatically: titles 36-56pt, stats 72-96pt, body 13-16pt
-4. Every slide needs decorative shapes (circles, bars, accent elements) — no plain text-only slides
-5. Mix these slide types throughout (use ALL of them):
-
-TITLE SLIDE: Deep dark background, giant title (48-56pt bold), subtitle (16pt), decorative large semi-transparent circles in corners, platform name small at bottom
-
-STAT/IMPACT: One giant number or % (80-96pt bold, accent color), 1-line label (18pt), contrasting full-color background, optional decorative bar
-
-SPLIT: Left half = dark panel with title+text, right half = lighter color with different content. Use two rect shapes side by side.
-
-CARDS: Light or white background, 2-3 colored rect cards (rounded), each with a bold header and 2-3 lines of body text inside
-
-QUOTE: Minimal design, one powerful quote (22-28pt italic, centered), large decorative " shape (120pt, muted), attribution line below
-
-TIMELINE/STEPS: Numbered circles (addShape ellipse, ~0.5in) spaced horizontally or vertically, label under/beside each, connected by thin rect bars
-
-TWO-COLUMN: Divider line (thin rect) in center, left = one concept, right = another, contrasting header colors
-
-CONTENT: Dark header panel at top, 4-6 items each as [small colored ellipse badge with number] + text on same row
-
-BOLD STATEMENT: Full bleed strong color, 2-4 word massive statement (44-52pt), small supporting text, strong visual
-
-CLOSING/CTA: Unique design different from title, main message + call to action, decorative elements
-
-═══ COLOR PALETTES (mix across slides) ═══
-Dark Slate:  BG=0F172A, accent=14B8A6, text=F1F5F9
-Navy+Gold:   BG=1E3A5F, accent=F59E0B, text=FFFFFF
-Deep Purple: BG=2D1B69, accent=A78BFA, text=F3F4F6
-Forest:      BG=1A3A2A, accent=34D399, text=ECFDF5
-Crimson:     BG=450A0A, accent=FCA5A5, text=FEF2F2
-Light Card:  BG=F8FAFC, accent=2563EB, text=1E293B
-Teal Card:   BG=F0FDFA, accent=0D9488, text=134E4A
-Warm Card:   BG=FFFBEB, accent=D97706, text=451A03
-
-Make every slide visually impressive. Think like a designer, not a programmer.`;
-
-
 // ─── Styling helpers ──────────────────────────────────────────────────────────
 
 const MODEL_COLORS: Record<string, string> = {
@@ -816,21 +748,36 @@ export default function ChatInterface({
     if (!session) { router.push('/login'); return; }
 
     try {
+      // ── Presentation: call Anthropic directly via dedicated endpoint ──────
+      if (isPresentation) {
+        const result = await apiFetch<{ code: string; tokensUsed: number; newBalance: number }>(
+          '/api/generate-presentation',
+          { method: 'POST', body: JSON.stringify({ topic: content }) }
+        );
+        setBalance(result.newBalance);
+        setMessages((prev) => prev.map((m) =>
+          m.streaming
+            ? { ...m, streaming: false, content: result.code, tokensUsed: result.tokensUsed }
+            : m
+        ));
+        return;
+      }
+
+      // ── Chat: stream via OpenRouter ───────────────────────────────────────
       let newConvId: string | null = null;
 
       await apiStream(
         '/api/chat',
         {
           conversationId,
-          content: isPresentation ? `Create a presentation about: ${content}` : content,
+          content,
           model,
           imageUrl: imageSnapshot?.dataUrl,
           fileText: fileSnapshot?.kind === 'text' ? fileSnapshot.text : undefined,
           fileData: fileSnapshot?.kind === 'pdf' ? fileSnapshot.dataUrl : undefined,
           fileName: fileSnapshot?.kind === 'pdf' ? fileSnapshot.name : undefined,
-          systemPrompt: isPresentation ? PRESENTATION_SYSTEM_PROMPT : undefined,
           contextMessages: linkedContext ? linkedContext.messages : undefined,
-          webSearch: webSearch && !isPresentation,
+          webSearch,
         },
         (chunk) => {
           const delta = (chunk as { choices?: Array<{ delta?: { content?: string } }> })

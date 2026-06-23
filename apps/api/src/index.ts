@@ -12,6 +12,7 @@ import { walletRouter } from './routes/wallet';
 import { conversationsRouter } from './routes/conversations';
 import { adminRouter } from './routes/admin';
 import { generateImageRouter } from './routes/generate-image';
+import { generatePresentationRouter } from './routes/generate-presentation';
 import { initRouter } from './routes/init';
 import type { AppVariables } from './types';
 
@@ -33,6 +34,7 @@ app.route('/api/wallet', walletRouter);
 app.route('/api/conversations', conversationsRouter);
 app.route('/api/admin', adminRouter);
 app.route('/api/generate-image', generateImageRouter);
+app.route('/api/generate-presentation', generatePresentationRouter);
 
 const port = parseInt(process.env.PORT || '3001');
 

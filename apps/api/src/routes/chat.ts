@@ -241,21 +241,19 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           'X-Title': 'TokenAI',
         },
         body: JSON.stringify({
-          model,
+          // Use the :online model variant for web search — this is OpenRouter's
+          // primary mechanism and works correctly with Gemini models. The plugins
+          // approach alone is unreliable for Gemini. Free models (:free suffix)
+          // cannot be combined with :online so web search is skipped for them.
+          model: (webSearch && !model.endsWith(':free')) ? `${model}:online` : model,
           messages: finalMessages,
           stream: true,
           // Tell the model exactly how many tokens it is allowed to generate.
           // For paid models this is derived from the user's actual wallet balance,
           // so the model CANNOT generate more tokens than the user can pay for.
           max_tokens: maxOutputTokens,
-          // Merge plugins: PDF parser and/or web search
-          ...(() => {
-            const plugins = [
-              ...(fileData ? [{ id: 'file-parser', pdf: { engine: 'native' } }] : []),
-              ...(webSearch ? [{ id: 'web', max_results: 5 }] : []),
-            ];
-            return plugins.length > 0 ? { plugins } : {};
-          })(),
+          // PDF plugin for native PDF parsing
+          ...(fileData ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
         }),
       });
 
