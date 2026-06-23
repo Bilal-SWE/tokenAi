@@ -105,4 +105,53 @@ export async function apiStream(
   }
 }
 
+export async function apiStreamPresentation(
+  topic: string,
+  onCode: (code: string, tokensUsed: number, newBalance: number) => void
+): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_URL}/api/generate-presentation`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ topic }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 402) {
+      const data = await res.json();
+      window.dispatchEvent(new CustomEvent('tokenai:insufficient-tokens', { detail: data }));
+      throw new ApiError(402, 'Insufficient tokens', data);
+    }
+    throw new ApiError(res.status, 'Presentation generation failed');
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const lines = decoder.decode(value).split('\n');
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      let data: Record<string, unknown>;
+      try { data = JSON.parse(raw); } catch { continue; }
+
+      if (data.error) {
+        const msg = String(data.error);
+        if (msg === 'insufficient_tokens') {
+          window.dispatchEvent(new CustomEvent('tokenai:insufficient-tokens', { detail: data }));
+          throw new ApiError(402, 'Insufficient tokens', data);
+        }
+        throw new ApiError(502, msg, data);
+      }
+      if (data.done && data.code) {
+        onCode(String(data.code), Number(data.tokensUsed), Number(data.newBalance));
+      }
+    }
+  }
+}
+
 export { API_URL };

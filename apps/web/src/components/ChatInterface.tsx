@@ -8,7 +8,7 @@ import {
   Mic, MicOff, Link2, LayoutTemplate, Reply, Scale, Globe,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { apiFetch, apiStream } from '@/lib/api';
+import { apiFetch, apiStream, apiStreamPresentation } from '@/lib/api';
 import { useWallet } from '@/context/WalletContext';
 import { useApp } from '@/context/AppContext';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
@@ -750,16 +750,12 @@ export default function ChatInterface({
     try {
       // ── Presentation: call Anthropic directly via dedicated endpoint ──────
       if (isPresentation) {
-        const result = await apiFetch<{ code: string; tokensUsed: number; newBalance: number }>(
-          '/api/generate-presentation',
-          { method: 'POST', body: JSON.stringify({ topic: content }) }
-        );
-        setBalance(result.newBalance);
-        setMessages((prev) => prev.map((m) =>
-          m.streaming
-            ? { ...m, streaming: false, content: result.code, tokensUsed: result.tokensUsed }
-            : m
-        ));
+        await apiStreamPresentation(content, (code, tokensUsed, newBalance) => {
+          setBalance(newBalance);
+          setMessages((prev) => prev.map((m) =>
+            m.streaming ? { ...m, streaming: false, content: code, tokensUsed } : m
+          ));
+        });
         return;
       }
 

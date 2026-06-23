@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '../middleware/auth';
 import { getSupabaseAdmin } from '../lib/supabase';
 import type { AppVariables } from '../types';
@@ -169,7 +170,6 @@ generatePresentationRouter.post('/', authMiddleware, async (c) => {
     return c.json({ error: 'Could not fetch wallet' }, 500);
   }
 
-  // Rough minimum check (presentation with thinking = ~10-14K tokens × multiplier)
   const modelInfo = getModel(REGISTRY_MODEL_ID);
   const multiplier = Number(modelInfo?.multiplier ?? 21);
   const minRequired = Math.ceil(10000 * multiplier);
@@ -178,72 +178,93 @@ generatePresentationRouter.post('/', authMiddleware, async (c) => {
     return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: minRequired }, 402);
   }
 
-  // Extended thinking lets the model plan the full deck before writing code —
-  // this is the key reason Claude.ai produces higher-quality presentations.
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: 8000 },
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `Create a presentation about: ${topic.trim()}` }],
-    }),
-  });
+  // Use SSE so the connection stays alive during the 30-90s Anthropic call.
+  // A heartbeat is sent every 15s to prevent proxy/browser timeouts.
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({ data: JSON.stringify({ status: 'generating' }) });
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    console.error('Anthropic API error', { userId, status: response.status, body: errorBody.slice(0, 300) });
-    if (response.status === 401) {
-      return c.json({ error: 'Anthropic API key is invalid. Please check your configuration.' }, 503);
+    // Heartbeat loop — runs concurrently while Anthropic processes the request
+    let heartbeatActive = true;
+    const heartbeat = (async () => {
+      while (heartbeatActive) {
+        await new Promise((r) => setTimeout(r, 15000));
+        if (heartbeatActive) {
+          await stream.writeSSE({ data: JSON.stringify({ status: 'generating' }) }).catch(() => {});
+        }
+      }
+    })();
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: ANTHROPIC_MODEL,
+          max_tokens: 16000,
+          thinking: { type: 'enabled', budget_tokens: 8000 },
+          system: SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: `Create a presentation about: ${topic.trim()}` }],
+        }),
+      });
+
+      heartbeatActive = false;
+      await heartbeat;
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        console.error('Anthropic API error', { userId, status: response.status, body: errorBody.slice(0, 300) });
+        const friendlyError = response.status === 401
+          ? 'Anthropic API key is invalid.'
+          : 'AI generation failed. Please try again.';
+        await stream.writeSSE({ data: JSON.stringify({ error: friendlyError }) });
+        return;
+      }
+
+      const result = await response.json() as {
+        content: Array<{ type: string; text?: string; thinking?: string }>;
+        usage: { input_tokens: number; output_tokens: number };
+      };
+
+      const code = result.content.find((block) => block.type === 'text')?.text ?? '';
+      const inputTokens = result.usage?.input_tokens ?? 0;
+      const outputTokens = result.usage?.output_tokens ?? 0;
+      const creditCost = Math.ceil((inputTokens + outputTokens) * multiplier);
+
+      const { data: deducted } = await supabase.rpc('deduct_tokens', {
+        p_user_id: userId,
+        p_amount: creditCost,
+        p_description: `Presentation: ${topic.slice(0, 60)}`,
+        p_metadata: { topic, model: ANTHROPIC_MODEL, inputTokens, outputTokens, multiplier },
+      });
+
+      if (!deducted) {
+        await stream.writeSSE({ data: JSON.stringify({ error: 'insufficient_tokens' }) });
+        return;
+      }
+
+      const { data: updatedWallet } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', userId)
+        .single();
+
+      await stream.writeSSE({
+        data: JSON.stringify({
+          done: true,
+          code,
+          tokensUsed: creditCost,
+          newBalance: updatedWallet?.balance ?? wallet.balance - creditCost,
+        }),
+      });
+    } catch (err) {
+      heartbeatActive = false;
+      await heartbeat;
+      console.error('Presentation stream error', { userId, err });
+      await stream.writeSSE({ data: JSON.stringify({ error: 'stream_error' }) });
     }
-    return c.json({ error: 'AI generation failed. Please try again.' }, 502);
-  }
-
-  const result = await response.json() as {
-    content: Array<{ type: string; text?: string; thinking?: string }>;
-    usage: { input_tokens: number; output_tokens: number };
-  };
-
-  // Extended thinking returns multiple blocks: { type: 'thinking' } then { type: 'text' }
-  const code = result.content.find((block) => block.type === 'text')?.text ?? '';
-  const inputTokens = result.usage?.input_tokens ?? 0;
-  const outputTokens = result.usage?.output_tokens ?? 0;
-  const totalTokens = inputTokens + outputTokens;
-  const creditCost = Math.ceil(totalTokens * multiplier);
-
-  // Deduct credits atomically
-  const { data: deducted } = await supabase.rpc('deduct_tokens', {
-    p_user_id: userId,
-    p_amount: creditCost,
-    p_description: `Presentation: ${topic.slice(0, 60)}`,
-    p_metadata: {
-      topic,
-      model: ANTHROPIC_MODEL,
-      inputTokens,
-      outputTokens,
-      multiplier,
-    },
-  });
-
-  if (!deducted) {
-    return c.json({ error: 'insufficient_tokens', balance: wallet.balance }, 402);
-  }
-
-  const { data: updatedWallet } = await supabase
-    .from('wallets')
-    .select('balance')
-    .eq('user_id', userId)
-    .single();
-
-  return c.json({
-    code,
-    tokensUsed: creditCost,
-    newBalance: updatedWallet?.balance ?? wallet.balance - creditCost,
   });
 });
