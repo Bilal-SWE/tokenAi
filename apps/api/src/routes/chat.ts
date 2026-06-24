@@ -155,10 +155,15 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     const affordableOutputTokens = Math.max(1, totalAffordableTokens - estInputTokens);
     maxOutputTokens = Math.min(8000, affordableOutputTokens);
 
-    // For tool-capable models reserve 2× to cover multi-iteration tool loops.
-    // Unused funds are refunded after the response is produced.
-    const reserveFactor = useTools ? 2 : 1;
-    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier) * reserveFactor);
+    // Reserve the single-request cost, capped at the wallet balance so users
+    // with any positive balance are never incorrectly blocked. Any unused
+    // portion is refunded after the response is produced.
+    const singleRequestCost = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier));
+    reservationAmount = Math.min(singleRequestCost, wallet.balance);
+
+    if (reservationAmount <= 0) {
+      return c.json({ error: 'insufficient_tokens', balance: wallet.balance, required: singleRequestCost }, 402);
+    }
 
     const { data: reserved } = await supabase.rpc('deduct_tokens', {
       p_user_id: userId,
