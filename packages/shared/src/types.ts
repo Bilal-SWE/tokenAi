@@ -41,6 +41,7 @@ export const AI_MODELS = [
     multiplier: 0,
     costPer1MTokens: 0,
     supportsVision: false,
+    supportsTools: false,
     badge: 'Free',
   },
   {
@@ -52,6 +53,7 @@ export const AI_MODELS = [
     multiplier: 0,
     costPer1MTokens: 0,
     supportsVision: false,
+    supportsTools: false,
     badge: 'Free',
   },
 
@@ -66,6 +68,7 @@ export const AI_MODELS = [
     multiplier: 1,
     costPer1MTokens: 0.25,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Cheapest',
   },
   // gemini-3.5-flash:  $1.50 in / $9.00 out → blended $5.25  → mult 12
@@ -78,6 +81,7 @@ export const AI_MODELS = [
     multiplier: 12,
     costPer1MTokens: 5.25,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Fast',
   },
   // gemini-2.5-pro:  $1.25 in / $10.00 out → blended $5.63  → mult 13
@@ -90,6 +94,7 @@ export const AI_MODELS = [
     multiplier: 13,
     costPer1MTokens: 5.63,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Best',
   },
 
@@ -104,6 +109,7 @@ export const AI_MODELS = [
     multiplier: 1,
     costPer1MTokens: 0.38,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Cheapest',
   },
   // gpt-4o:  $2.50 in / $10.00 out → blended $6.25  → mult 15
@@ -116,6 +122,7 @@ export const AI_MODELS = [
     multiplier: 15,
     costPer1MTokens: 6.25,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Fast',
   },
   // gpt-5.5:  $5.00 in / $30.00 out → blended $17.50  → mult 40
@@ -128,6 +135,7 @@ export const AI_MODELS = [
     multiplier: 40,
     costPer1MTokens: 17.50,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Best',
   },
 
@@ -142,6 +150,7 @@ export const AI_MODELS = [
     multiplier: 7,
     costPer1MTokens: 3.00,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Cheapest',
   },
   // claude-sonnet-4.5:  $3.00 in / $15.00 out → blended $9.00  → mult 21
@@ -154,6 +163,7 @@ export const AI_MODELS = [
     multiplier: 21,
     costPer1MTokens: 9.00,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Fast',
   },
   // claude-opus-4.8:  $5.00 in / $25.00 out → blended $15.00  → mult 34
@@ -166,6 +176,7 @@ export const AI_MODELS = [
     multiplier: 34,
     costPer1MTokens: 15.00,
     supportsVision: true,
+    supportsTools: true,
     badge: 'Best',
   },
 ] as const;

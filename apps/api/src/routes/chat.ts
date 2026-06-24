@@ -3,6 +3,8 @@ import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '../middleware/auth';
 import { rateLimitMiddleware } from '../middleware/rateLimit';
 import { getSupabaseAdmin } from '../lib/supabase';
+import { executeLiveDataTool } from '../lib/tools/liveData';
+import type { LiveDataArgs } from '../lib/tools/liveData';
 import type { AppVariables } from '../types';
 import type { SendMessageRequest } from '@tokenai/shared';
 import { getModel, AI_MODELS, FREE_DAILY_MESSAGE_LIMIT } from '@tokenai/shared';
@@ -11,41 +13,112 @@ const FREE_MODEL_IDS = AI_MODELS.filter((m) => Number(m.multiplier) === 0).map((
 
 export const chatRouter = new Hono<{ Variables: AppVariables }>();
 
+// ─── Tool definitions sent to OpenRouter on every tool-capable request ────────
+
+const CHAT_TOOLS = [
+  {
+    type: 'openrouter:web_search',
+    parameters: {
+      engine: 'exa',
+      max_results: 5,
+      search_context_size: 'high',
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_live_data',
+      description:
+        'Get real-time structured data like live/recent sports scores, standings, or fixtures. ' +
+        'Use this instead of web search for anything that changes in real time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          domain: {
+            type: 'string',
+            enum: ['sports'],
+            description: 'Which live-data source to query. Extensible later (finance, weather).',
+          },
+          query: {
+            type: 'string',
+            description: "What to fetch, e.g. 'world cup 2026 scores today'.",
+          },
+        },
+        required: ['domain', 'query'],
+      },
+    },
+  },
+];
+
+// ─── Internal types for non-streaming OpenRouter responses ────────────────────
+
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+interface ORNonStreamResponse {
+  choices: Array<{
+    message: {
+      role: string;
+      content: string | null;
+      tool_calls?: ToolCall[];
+    };
+    finish_reason: string;
+  }>;
+  usage?: {
+    total_tokens?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    web_search_requests?: number;
+  };
+}
+
+// ─── OpenRouter headers (shared) ─────────────────────────────────────────────
+
+function orHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'HTTP-Referer': 'https://tokenai.app',
+    'X-Title': 'TokenAI',
+  };
+}
+
+// ─── Route ────────────────────────────────────────────────────────────────────
+
 chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   const userId = c.get('userId') as string;
   const body = await c.req.json<SendMessageRequest>();
-  const { conversationId: inputConvId, content, model, imageUrl, fileText, fileData, fileName,
-          systemPrompt, contextMessages: incomingContextMessages, skipPersist, webSearch } = body;
+  const {
+    conversationId: inputConvId, content, model, imageUrl, fileText, fileData, fileName,
+    systemPrompt, contextMessages: incomingContextMessages, skipPersist,
+  } = body;
 
   if (!content || !model) {
     return c.json({ error: 'content and model are required' }, 400);
   }
 
-  // Validate base64 image size (max ~4MB base64 ≈ 3MB raw)
   if (imageUrl && imageUrl.length > 4_000_000) {
     return c.json({ error: 'Image too large (max 3MB)' }, 400);
   }
 
-  // Validate base64 PDF size (max ~15M base64 chars ≈ 11MB raw)
   if (fileData && fileData.length > 15_000_000) {
     return c.json({ error: 'PDF too large (max ~10MB)' }, 400);
   }
 
   const modelInfo = getModel(model);
-
-  // Reject unknown / removed model IDs outright — a missing modelInfo would cause
-  // the multiplier to fall back to 1, which could let users run expensive models
-  // for almost free and would give wrong max_tokens budgets.
   if (!modelInfo) {
     return c.json({ error: 'model_not_supported', model }, 400);
   }
 
   const multiplier = modelInfo.multiplier;
   const isFree = Number(multiplier) === 0;
+  const useTools = modelInfo.supportsTools && !isFree;
 
   const supabase = getSupabaseAdmin();
 
-  // Check wallet balance
   const { data: wallet, error: walletError } = await supabase
     .from('wallets')
     .select('balance')
@@ -57,24 +130,14 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return c.json({ error: 'Could not fetch wallet' }, 500);
   }
 
-  // Estimated input tokens (chars/4 + buffer for history & system prompt)
-  // Buffer of 500 covers typical conversation history without over-reducing output budget.
   const estInputTokens = Math.ceil(content.length / 4)
     + (fileText ? Math.ceil(fileText.length / 4) : 0)
     + 500;
 
-  // How many output tokens the user can actually afford.
-  // For free models this is 8000 (the platform cap). For paid models we derive
-  // it from the wallet balance so the model literally cannot generate more than
-  // the user can pay for.
-  let maxOutputTokens = 8000; // safe default (overridden below for paid models)
-
-  // Amount reserved upfront from wallet before streaming (0 for free models).
-  // After streaming, unused portion is refunded via refund_tokens().
+  let maxOutputTokens = 8000;
   let reservationAmount = 0;
 
   if (isFree) {
-    // Free models: no balance needed, but enforce a daily message limit
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const { count } = await supabase
@@ -88,17 +151,15 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       return c.json({ error: 'free_limit_reached', limit: FREE_DAILY_MESSAGE_LIMIT }, 429);
     }
   } else {
-    // How many total AI tokens the user can afford
     const totalAffordableTokens = Math.floor(wallet.balance / Number(multiplier));
-    // Subtract estimated input to get the output budget
     const affordableOutputTokens = Math.max(1, totalAffordableTokens - estInputTokens);
-    // Never exceed 8000 (model/platform hard cap)
     maxOutputTokens = Math.min(8000, affordableOutputTokens);
 
-    // Pre-reserve the maximum possible cost before streaming.
-    // This atomically locks the tokens so concurrent requests cannot overdraw
-    // the wallet. The unused portion is refunded after the stream ends.
-    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier));
+    // For tool-capable models reserve 2× to cover multi-iteration tool loops.
+    // Unused funds are refunded after the response is produced.
+    const reserveFactor = useTools ? 2 : 1;
+    reservationAmount = Math.ceil((estInputTokens + maxOutputTokens) * Number(multiplier) * reserveFactor);
+
     const { data: reserved } = await supabase.rpc('deduct_tokens', {
       p_user_id: userId,
       p_amount: reservationAmount,
@@ -111,7 +172,8 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     }
   }
 
-  // Create or retrieve conversation (skipped in compare-mode secondary stream)
+  // ── Conversation & message setup (unchanged) ──────────────────────────────
+
   let conversationId = inputConvId;
   if (!skipPersist) {
     if (!conversationId) {
@@ -129,7 +191,6 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       conversationId = conv.id;
     }
 
-    // Build stored content (always text for DB)
     const storedUserContent = imageUrl
       ? `[Image attached] ${content}`
       : fileData
@@ -138,7 +199,6 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       ? `[File context attached] ${content}`
       : content;
 
-    // Save user message
     await supabase.from('messages').insert({
       conversation_id: conversationId,
       user_id: userId,
@@ -147,8 +207,6 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     });
   }
 
-  // Fetch last 20 messages for context (~10 exchanges of memory)
-  // When skipPersist, rely solely on incomingContextMessages (passed by frontend)
   let historyMessages: { role: string; content: string }[] = [];
   if (!skipPersist && conversationId) {
     const { data: history } = await supabase
@@ -162,7 +220,6 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }));
   }
 
-  // Replace the last user message with the multimodal version if needed
   const contextMessages = historyMessages.map((m, i) => {
     if (i === historyMessages.length - 1 && m.role === 'user') {
       if (imageUrl) {
@@ -197,18 +254,14 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
     return m;
   });
 
-  // Build the final messages array
   let finalMessages: { role: string; content: unknown }[];
 
   if (skipPersist) {
-    // Compare mode (stream B): use incomingContextMessages as real chat history
-    // then append the current user message — nothing is stored in DB
     finalMessages = [
       ...(incomingContextMessages || []).map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content },
     ];
   } else {
-    // Normal mode: optionally prepend a system prompt and/or linked-conversation context
     const systemParts: string[] = [];
     if (systemPrompt) systemParts.push(systemPrompt);
     if (incomingContextMessages && incomingContextMessages.length > 0) {
@@ -222,148 +275,30 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       : contextMessages;
   }
 
-  // Safety-net: mid-stream char limit derived from the same maxOutputTokens
-  // (chars ≈ tokens × 4). For free models this is effectively unlimited.
   const affordableOutputChars = isFree ? Infinity : maxOutputTokens * 4;
+
+  // ── SSE stream ────────────────────────────────────────────────────────────
 
   return streamSSE(c, async (stream) => {
     let assistantContent = '';
-    let tokensUsed = 0;
     let balanceExhausted = false;
 
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://tokenai.app',
-          'X-Title': 'TokenAI',
-        },
-        body: JSON.stringify({
-          // :online suffix activates OpenRouter's search-enabled model variant.
-          // plugins web covers models where :online isn't supported — OpenRouter
-          // does the search itself and injects results into the context.
-          // Using both together maximises coverage across all providers.
-          // Free models (:free suffix) cannot be combined with :online.
-          model: (webSearch && !model.endsWith(':free')) ? `${model}:online` : model,
-          messages: finalMessages,
-          stream: true,
-          max_tokens: maxOutputTokens,
-          ...(() => {
-            const plugins = [
-              ...(fileData ? [{ id: 'file-parser', pdf: { engine: 'native' } }] : []),
-              ...(webSearch && !model.endsWith(':free') ? [{ id: 'web', max_results: 5 }] : []),
-            ];
-            return plugins.length > 0 ? { plugins } : {};
-          })(),
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        const errorBody = await response.text().catch(() => '');
-        console.error('OpenRouter error', { userId, model, status: response.status, body: errorBody });
-        // Refund the full reservation — user got no response
-        if (!isFree && reservationAmount > 0) {
-          const { error: refundErr } = await supabase.rpc('refund_tokens', {
-            p_user_id: userId,
-            p_amount: reservationAmount,
-            p_description: 'Refund - upstream error',
-            p_metadata: { model },
-          });
-          if (refundErr) console.error('Refund on upstream error failed', refundErr);
-        }
-        // Extract a human-readable message from OpenRouter's error response
-        let friendlyError = 'The AI provider returned an error. Please try again.';
-        try {
-          const parsed = JSON.parse(errorBody);
-          const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
-          if (response.status === 402 || msg.toLowerCase().includes('credits')) {
-            console.error('OpenRouter credits exhausted — add credits at openrouter.ai/credits', { userId, model, status: response.status });
-            friendlyError = 'The AI service is temporarily unavailable. Please try again later or switch to a different model.';
-          } else if (msg) {
-            friendlyError = msg.length > 200 ? msg.slice(0, 200) + '…' : msg;
-          }
-        } catch { /* not JSON — keep default */ }
-        await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: friendlyError }) });
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(raw);
-
-            if (parsed.usage?.total_tokens) {
-              tokensUsed = parsed.usage.total_tokens;
-            }
-
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantContent += delta;
-
-              // Stop mid-stream if output chars exceed what balance can cover
-              if (!isFree && assistantContent.length >= affordableOutputChars) {
-                balanceExhausted = true;
-                await reader.cancel();
-                await stream.writeSSE({ data: JSON.stringify({ balance_exhausted: true }) });
-                break outer;
-              }
-            }
-
-            await stream.writeSSE({ data: raw });
-          } catch {
-            // Skip malformed chunks
-          }
-        }
-      }
-
-      // If usage wasn't in the stream, estimate from content length
-      if (tokensUsed === 0) {
-        tokensUsed = Math.ceil((content.length + assistantContent.length) / 4);
-      }
-
-      const actualCost = Math.ceil(tokensUsed * Number(multiplier));
-      let newBalance = wallet.balance;
-
+    // Shared refund helper used in both paths
+    const refundReservation = async (reason: string) => {
       if (!isFree && reservationAmount > 0) {
-        // Refund the unused portion of the pre-reservation back to the user.
-        // If actual cost somehow exceeds the reservation (rare, due to input estimation),
-        // refundAmount is 0 and no refund is issued — user is charged reservationAmount.
-        const refundAmount = Math.max(0, reservationAmount - actualCost);
-        if (refundAmount > 0) {
-          await supabase.rpc('refund_tokens', {
-            p_user_id: userId,
-            p_amount: refundAmount,
-            p_description: `Refund for chat with ${modelInfo?.label ?? model}`,
-            p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
-          });
-        }
-
-        const { data: updatedWallet } = await supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_id', userId)
-          .single();
-
-        newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
+        const { error: refundErr } = await supabase.rpc('refund_tokens', {
+          p_user_id: userId,
+          p_amount: reservationAmount,
+          p_description: reason,
+          p_metadata: { model },
+        });
+        if (refundErr) console.error('Refund failed', refundErr);
       }
+    };
 
+    // Shared post-send: save to DB and emit done event
+    const finalize = async (actualCost: number, newBalance: number) => {
       if (!skipPersist) {
-        // Save assistant message
         await supabase.from('messages').insert({
           conversation_id: conversationId,
           user_id: userId,
@@ -372,35 +307,240 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           tokens_used: actualCost,
           model,
         });
-
-        // Update conversation timestamp
         await supabase
           .from('conversations')
           .update({ updated_at: new Date().toISOString() })
           .eq('id', conversationId);
       }
-
       await stream.writeSSE({
         data: JSON.stringify({
           done: true,
           conversationId: skipPersist ? null : conversationId,
           tokensUsed: actualCost,
-          aiTokens: tokensUsed,
           newBalance,
+          balanceExhausted,
         }),
       });
+    };
+
+    try {
+      if (useTools) {
+        // ── AGENTIC LOOP (non-streaming, tool-capable models) ───────────────
+        const maxIterations = parseInt(process.env.MAX_TOOL_ITERATIONS ?? '4');
+        let loopMessages = [...finalMessages] as Record<string, unknown>[];
+        let totalLlmTokens = 0;
+        let totalWebSearchRequests = 0;
+
+        for (let iter = 0; iter < maxIterations; iter++) {
+          const orResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: orHeaders(),
+            body: JSON.stringify({
+              model,
+              messages: loopMessages,
+              tools: CHAT_TOOLS,
+              stream: false,
+              max_tokens: maxOutputTokens,
+              ...(fileData ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
+            }),
+          });
+
+          if (!orResp.ok) {
+            const errBody = await orResp.text().catch(() => '');
+            console.error('OpenRouter error (tools loop)', { userId, model, iter, status: orResp.status, body: errBody });
+            await refundReservation('Refund - upstream error (tools loop)');
+            let msg = 'The AI provider returned an error. Please try again.';
+            try {
+              const p = JSON.parse(errBody);
+              const m: string = p?.error?.message ?? p?.message ?? '';
+              if (orResp.status === 402 || m.toLowerCase().includes('credits')) {
+                console.error('OpenRouter credits exhausted', { userId, model });
+                msg = 'The AI service is temporarily unavailable. Please try again later.';
+              } else if (m) msg = m.slice(0, 200);
+            } catch { /* non-JSON */ }
+            await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: msg }) });
+            return;
+          }
+
+          const data = await orResp.json() as ORNonStreamResponse;
+          const usage = data.usage;
+          totalLlmTokens += usage?.total_tokens
+            ?? ((usage?.prompt_tokens ?? 0) + (usage?.completion_tokens ?? 0));
+          totalWebSearchRequests += usage?.web_search_requests ?? 0;
+
+          const choice = data.choices?.[0];
+          if (!choice) break;
+
+          if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
+            // Append assistant message (with tool_calls) to history
+            loopMessages = [...loopMessages, choice.message as unknown as Record<string, unknown>];
+
+            // Execute only our get_live_data function — openrouter:web_search is resolved server-side
+            const toolResults: Record<string, unknown>[] = [];
+            for (const tc of choice.message.tool_calls) {
+              if (tc.function?.name !== 'get_live_data') continue;
+              let args: LiveDataArgs;
+              try {
+                args = JSON.parse(tc.function.arguments) as LiveDataArgs;
+              } catch {
+                toolResults.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: 'invalid arguments' }) });
+                continue;
+              }
+              const result = await executeLiveDataTool(args);
+              toolResults.push({ role: 'tool', tool_call_id: tc.id, content: result });
+            }
+
+            if (toolResults.length > 0) {
+              loopMessages = [...loopMessages, ...toolResults];
+            } else {
+              // Only server-side tools were called (web search) — OpenRouter already merged
+              // results; the model will produce a text response on the next iteration
+            }
+            continue;
+          }
+
+          // Normal text response — loop is done
+          assistantContent = choice.message.content ?? '';
+          break;
+        }
+
+        // If the loop cap was hit without a text response, assistantContent stays as whatever
+        // partial content we may have received (or empty, which is fine).
+
+        // Calculate combined cost: LLM tokens + web search requests
+        const webSearchCostPerRequest = parseInt(process.env.WEB_SEARCH_COST_PER_REQUEST ?? '6000');
+        const webSearchCost = totalWebSearchRequests * webSearchCostPerRequest;
+        const llmCost = Math.ceil(totalLlmTokens * Number(multiplier));
+        const actualCost = llmCost + webSearchCost;
+
+        // Emit content to client
+        if (assistantContent) {
+          await stream.writeSSE({
+            data: JSON.stringify({ choices: [{ delta: { content: assistantContent } }] }),
+          });
+        }
+
+        // Refund unused reservation
+        let newBalance = wallet.balance;
+        if (!isFree && reservationAmount > 0) {
+          const refundAmount = Math.max(0, reservationAmount - actualCost);
+          if (refundAmount > 0) {
+            await supabase.rpc('refund_tokens', {
+              p_user_id: userId,
+              p_amount: refundAmount,
+              p_description: `Refund for chat with ${modelInfo?.label ?? model}`,
+              p_metadata: { model, conversationId, aiTokens: totalLlmTokens, webSearchRequests: totalWebSearchRequests, multiplier },
+            });
+          }
+          const { data: updatedWallet } = await supabase
+            .from('wallets').select('balance').eq('user_id', userId).single();
+          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
+        }
+
+        await finalize(actualCost, newBalance);
+
+      } else {
+        // ── STREAMING PATH (free models or non-tool-capable) ─────────────────
+        let tokensUsed = 0;
+
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: orHeaders(),
+          body: JSON.stringify({
+            model,
+            messages: finalMessages,
+            stream: true,
+            max_tokens: maxOutputTokens,
+            ...(fileData ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
+          }),
+        });
+
+        if (!response.ok || !response.body) {
+          const errorBody = await response.text().catch(() => '');
+          console.error('OpenRouter error', { userId, model, status: response.status, body: errorBody });
+          await refundReservation('Refund - upstream error');
+          let friendlyError = 'The AI provider returned an error. Please try again.';
+          try {
+            const parsed = JSON.parse(errorBody);
+            const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
+            if (response.status === 402 || msg.toLowerCase().includes('credits')) {
+              console.error('OpenRouter credits exhausted', { userId, model, status: response.status });
+              friendlyError = 'The AI service is temporarily unavailable. Please try again later or switch to a different model.';
+            } else if (msg) {
+              friendlyError = msg.length > 200 ? msg.slice(0, 200) + '…' : msg;
+            }
+          } catch { /* not JSON */ }
+          await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: friendlyError }) });
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        outer: while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(raw);
+
+              if (parsed.usage?.total_tokens) {
+                tokensUsed = parsed.usage.total_tokens;
+              }
+
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta) {
+                assistantContent += delta;
+                if (!isFree && assistantContent.length >= affordableOutputChars) {
+                  balanceExhausted = true;
+                  await reader.cancel();
+                  await stream.writeSSE({ data: JSON.stringify({ balance_exhausted: true }) });
+                  break outer;
+                }
+              }
+
+              await stream.writeSSE({ data: raw });
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+
+        if (tokensUsed === 0) {
+          tokensUsed = Math.ceil((content.length + assistantContent.length) / 4);
+        }
+
+        const actualCost = Math.ceil(tokensUsed * Number(multiplier));
+        let newBalance = wallet.balance;
+
+        if (!isFree && reservationAmount > 0) {
+          const refundAmount = Math.max(0, reservationAmount - actualCost);
+          if (refundAmount > 0) {
+            await supabase.rpc('refund_tokens', {
+              p_user_id: userId,
+              p_amount: refundAmount,
+              p_description: `Refund for chat with ${modelInfo?.label ?? model}`,
+              p_metadata: { model, conversationId, aiTokens: tokensUsed, multiplier },
+            });
+          }
+          const { data: updatedWallet } = await supabase
+            .from('wallets').select('balance').eq('user_id', userId).single();
+          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
+        }
+
+        await finalize(actualCost, newBalance);
+      }
     } catch (err) {
       console.error('Chat stream error', { userId, model, err });
-      // Refund the full reservation so the user isn't charged for a failed request
-      if (!isFree && reservationAmount > 0) {
-        const { error: refundErr } = await supabase.rpc('refund_tokens', {
-          p_user_id: userId,
-          p_amount: reservationAmount,
-          p_description: 'Refund - stream error',
-          p_metadata: { model },
-        });
-        if (refundErr) console.error('Refund on stream error failed', refundErr);
-      }
+      await refundReservation('Refund - stream error');
       await stream.writeSSE({ data: JSON.stringify({ error: 'stream_error' }) });
     }
   });
