@@ -13,42 +13,35 @@ const FREE_MODEL_IDS = AI_MODELS.filter((m) => Number(m.multiplier) === 0).map((
 
 export const chatRouter = new Hono<{ Variables: AppVariables }>();
 
-// ─── Tool definitions sent to OpenRouter on every tool-capable request ────────
+// ─── Function tools for the agentic loop ─────────────────────────────────────
+// openrouter:web_search is NOT here — it is sent as a plugin (plugins array)
+// so OpenRouter always injects live search results automatically. Function tools
+// are only for data we execute ourselves.
 
-const CHAT_TOOLS = [
-  {
-    type: 'openrouter:web_search',
+const LIVE_DATA_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'get_live_data',
+    description:
+      'Get real-time structured data like live/recent sports scores, standings, or fixtures. ' +
+      'Use this for anything that changes in real time.',
     parameters: {
-      engine: 'exa',
-      max_results: 5,
-      search_context_size: 'high',
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_live_data',
-      description:
-        'Get real-time structured data like live/recent sports scores, standings, or fixtures. ' +
-        'Use this instead of web search for anything that changes in real time.',
-      parameters: {
-        type: 'object',
-        properties: {
-          domain: {
-            type: 'string',
-            enum: ['sports'],
-            description: 'Which live-data source to query. Extensible later (finance, weather).',
-          },
-          query: {
-            type: 'string',
-            description: "What to fetch, e.g. 'world cup 2026 scores today'.",
-          },
+      type: 'object',
+      properties: {
+        domain: {
+          type: 'string',
+          enum: ['sports'],
+          description: 'Which live-data source to query.',
         },
-        required: ['domain', 'query'],
+        query: {
+          type: 'string',
+          description: "What to fetch, e.g. 'world cup 2026 scores today'.",
+        },
       },
+      required: ['domain', 'query'],
     },
   },
-];
+};
 
 // ─── Internal types for non-streaming OpenRouter responses ────────────────────
 
@@ -75,6 +68,15 @@ interface ORNonStreamResponse {
   };
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function buildPlugins(webSearch: boolean | undefined, fileData: string | undefined) {
+  const list: { id: string; [k: string]: unknown }[] = [];
+  if (webSearch) list.push({ id: 'web' });
+  if (fileData) list.push({ id: 'file-parser', pdf: { engine: 'native' } });
+  return list.length > 0 ? { plugins: list } : {};
+}
+
 // ─── OpenRouter headers (shared) ─────────────────────────────────────────────
 
 function orHeaders(): Record<string, string> {
@@ -93,7 +95,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   const body = await c.req.json<SendMessageRequest>();
   const {
     conversationId: inputConvId, content, model, imageUrl, fileText, fileData, fileName,
-    systemPrompt, contextMessages: incomingContextMessages, skipPersist,
+    systemPrompt, contextMessages: incomingContextMessages, skipPersist, webSearch,
   } = body;
 
   if (!content || !model) {
@@ -343,10 +345,10 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
             body: JSON.stringify({
               model,
               messages: loopMessages,
-              tools: CHAT_TOOLS,
+              tools: [LIVE_DATA_TOOL],
               stream: false,
               max_tokens: maxOutputTokens,
-              ...(fileData ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
+              ...buildPlugins(webSearch, fileData),
             }),
           });
 
@@ -456,7 +458,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
             messages: finalMessages,
             stream: true,
             max_tokens: maxOutputTokens,
-            ...(fileData ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
+            ...buildPlugins(webSearch, fileData),
           }),
         });
 
