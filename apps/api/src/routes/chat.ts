@@ -72,7 +72,8 @@ interface ORNonStreamResponse {
 
 function buildPlugins(webSearch: boolean | undefined, fileData: string | undefined) {
   const list: { id: string; [k: string]: unknown }[] = [];
-  if (webSearch) list.push({ id: 'web' });
+  // search_context_size:'low' injects shorter snippets — significantly cheaper than 'medium'/'high'
+  if (webSearch) list.push({ id: 'web', web: { search_context_size: 'low', max_results: 3 } });
   if (fileData) list.push({ id: 'file-parser', pdf: { engine: 'native' } });
   return list.length > 0 ? { plugins: list } : {};
 }
@@ -117,7 +118,13 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
 
   const multiplier = modelInfo.multiplier;
   const isFree = Number(multiplier) === 0;
-  const useTools = modelInfo.supportsTools && !isFree;
+  // Only use the agentic tool loop when the model supports tools AND live-data
+  // keywords appear in the query. For pure web-search requests the streaming path
+  // with the web plugin is simpler, faster, and works across all providers.
+  const liveDataKeywords = ['score', 'match', 'live', 'fixture', 'standing', 'result', 'league',
+    'نتيجة', 'مباراة', 'مباريات', 'دوري', 'نتائج', 'هدف', 'أهداف'];
+  const queryNeedsLiveData = liveDataKeywords.some((kw) => content.toLowerCase().includes(kw));
+  const useTools = modelInfo.supportsTools && !isFree && queryNeedsLiveData;
 
   const supabase = getSupabaseAdmin();
 
