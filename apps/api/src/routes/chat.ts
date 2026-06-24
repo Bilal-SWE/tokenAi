@@ -118,13 +118,14 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
 
   const multiplier = modelInfo.multiplier;
   const isFree = Number(multiplier) === 0;
-  // Only use the agentic tool loop when the model supports tools AND live-data
-  // keywords appear in the query. For pure web-search requests the streaming path
-  // with the web plugin is simpler, faster, and works across all providers.
+  // Only activate the agentic loop when the sports API is actually configured.
+  // Without it get_live_data always errors, causing the model to retry 4 times
+  // and charge tokens with no response.
+  const sportsApiConfigured = !!(process.env.SPORTS_API_BASE_URL && process.env.SPORTS_API_KEY);
   const liveDataKeywords = ['score', 'match', 'live', 'fixture', 'standing', 'result', 'league',
     'نتيجة', 'مباراة', 'مباريات', 'دوري', 'نتائج', 'هدف', 'أهداف'];
   const queryNeedsLiveData = liveDataKeywords.some((kw) => content.toLowerCase().includes(kw));
-  const useTools = modelInfo.supportsTools && !isFree && queryNeedsLiveData;
+  const useTools = modelInfo.supportsTools && !isFree && queryNeedsLiveData && sportsApiConfigured;
 
   const supabase = getSupabaseAdmin();
 
@@ -420,8 +421,12 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           break;
         }
 
-        // If the loop cap was hit without a text response, assistantContent stays as whatever
-        // partial content we may have received (or empty, which is fine).
+        // Safety: if the loop ended without any text response, refund in full and bail out.
+        if (!assistantContent) {
+          await refundReservation('Refund - tool loop produced no text response');
+          await stream.writeSSE({ data: JSON.stringify({ error: 'upstream_error', details: 'The model did not return a response. Please try again.' }) });
+          return;
+        }
 
         // Calculate combined cost: LLM tokens + web search requests
         const webSearchCostPerRequest = parseInt(process.env.WEB_SEARCH_COST_PER_REQUEST ?? '6000');
@@ -430,11 +435,9 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
         const actualCost = llmCost + webSearchCost;
 
         // Emit content to client
-        if (assistantContent) {
-          await stream.writeSSE({
-            data: JSON.stringify({ choices: [{ delta: { content: assistantContent } }] }),
-          });
-        }
+        await stream.writeSSE({
+          data: JSON.stringify({ choices: [{ delta: { content: assistantContent } }] }),
+        });
 
         // Refund unused reservation
         let newBalance = wallet.balance;
@@ -450,7 +453,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           }
           const { data: updatedWallet } = await supabase
             .from('wallets').select('balance').eq('user_id', userId).single();
-          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
+          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - reservationAmount);
         }
 
         await finalize(actualCost, newBalance);
@@ -549,7 +552,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           }
           const { data: updatedWallet } = await supabase
             .from('wallets').select('balance').eq('user_id', userId).single();
-          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - actualCost);
+          newBalance = updatedWallet?.balance ?? Math.max(0, wallet.balance - reservationAmount);
         }
 
         await finalize(actualCost, newBalance);
