@@ -339,6 +339,8 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
         let totalWebSearchRequests = 0;
 
         for (let iter = 0; iter < maxIterations; iter++) {
+          // Web plugin only on first iteration — after that the search results are
+          // already in the conversation history and re-triggering would double costs.
           const orResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: orHeaders(),
@@ -348,7 +350,7 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
               tools: [LIVE_DATA_TOOL],
               stream: false,
               max_tokens: maxOutputTokens,
-              ...buildPlugins(webSearch, fileData),
+              ...buildPlugins(iter === 0 ? webSearch : false, iter === 0 ? fileData : undefined),
             }),
           });
 
