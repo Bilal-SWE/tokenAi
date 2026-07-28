@@ -232,7 +232,12 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
       .limit(20);
     historyMessages = (history || [])
       .reverse()
-      .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }));
+      .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }))
+      // Skip base64 image blobs & very long data URLs to avoid overwhelming the model context
+      .filter((m: { role: string; content: string }) => {
+        const c = m.content || '';
+        return !c.startsWith('data:image') && c.length < 50_000;
+      });
   }
 
   const contextMessages = historyMessages.map((m, i) => {
@@ -279,6 +284,17 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
   } else {
     const systemParts: string[] = [];
     if (systemPrompt) systemParts.push(systemPrompt);
+    if (webSearch) {
+      systemParts.push(
+        'IMPORTANT INSTRUCTIONS FOR WEB SEARCH:\n' +
+        'Web search is active. Search the web for up-to-date and accurate information to answer the user query.\n' +
+        'Use inline numeric citations like [1], [2] in your text where information from a specific search result is cited.\n' +
+        'At the VERY END of your response, ALWAYS include a dedicated section with this exact title:\n' +
+        '### 🌐 Sources and References:\n' +
+        'List every source as bullet points in this exact format:\n' +
+        '- [Site or Article Title](URL)'
+      );
+    }
     if (incomingContextMessages && incomingContextMessages.length > 0) {
       const contextBlock = incomingContextMessages
         .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -428,8 +444,8 @@ chatRouter.post('/', authMiddleware, rateLimitMiddleware, async (c) => {
           return;
         }
 
-        // Calculate combined cost: LLM tokens + web search requests
-        const webSearchCostPerRequest = parseInt(process.env.WEB_SEARCH_COST_PER_REQUEST ?? '6000');
+        // Calculate combined cost: LLM tokens + web search requests (OpenRouter web search is $0.004 = 4,000 tokens at cost)
+        const webSearchCostPerRequest = parseInt(process.env.WEB_SEARCH_COST_PER_REQUEST ?? '4000');
         const webSearchCost = totalWebSearchRequests * webSearchCostPerRequest;
         const llmCost = Math.ceil(totalLlmTokens * Number(multiplier));
         const actualCost = llmCost + webSearchCost;

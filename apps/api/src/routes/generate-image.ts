@@ -8,7 +8,11 @@ export const generateImageRouter = new Hono<{ Variables: AppVariables }>();
 
 generateImageRouter.post('/', authMiddleware, async (c) => {
   const userId = c.get('userId');
-  const { prompt, model: modelId } = await c.req.json<{ prompt: string; model?: string }>();
+  const { prompt, model: modelId, conversationId: inputConvId } = await c.req.json<{
+    prompt: string;
+    model?: string;
+    conversationId?: string | null;
+  }>();
 
   if (!prompt?.trim()) {
     return c.json({ error: 'prompt is required' }, 400);
@@ -21,6 +25,18 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
   // Validate & resolve model (default to Gemini Flash Image)
   const imageModel = IMAGE_MODELS.find((m) => m.id === modelId) ?? IMAGE_MODELS[0];
   const tokenCost = imageModel.credits;
+
+  // Map our UI model IDs to supported OpenRouter model IDs
+  let openRouterModelId = imageModel.id;
+  if (imageModel.id === 'openai/dall-e-2') {
+    openRouterModelId = 'black-forest-labs/flux-1.1-schnell';
+  } else if (imageModel.id === 'openai/dall-e-3') {
+    openRouterModelId = 'black-forest-labs/flux-1.1-dev';
+  } else if (imageModel.id === 'openai/dall-e-3-hd') {
+    openRouterModelId = 'black-forest-labs/flux-1.1-pro';
+  } else if (imageModel.id === 'google/gemini-3.1-flash-image-lite') {
+    openRouterModelId = 'google/gemini-3.1-flash-image';
+  }
 
   const supabase = getSupabaseAdmin();
 
@@ -68,7 +84,7 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
         method: 'POST',
         headers: upstreamHeaders,
         body: JSON.stringify({
-          model: imageModel.id,
+          model: openRouterModelId,
           messages: [{ role: 'user', content: prompt.trim() }],
           modalities: ['image', 'text'],
         }),
@@ -80,17 +96,46 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       }
 
       const result = await response.json() as {
-        choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | Array<{ type: string; image_url?: { url?: string }; text?: string }>;
+            images?: Array<{ image_url?: { url?: string } }>;
+          };
+        }>;
       };
-      imageUrl = result?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+      // Try multiple response formats that OpenRouter/Gemini may return
+      const msg = result?.choices?.[0]?.message;
+
+      // Format 1: message.images[] (old spec)
+      imageUrl = msg?.images?.[0]?.image_url?.url;
+
+      // Format 2: message.content is a base64 data URL string
+      if (!imageUrl && typeof msg?.content === 'string' && msg.content.startsWith('data:image')) {
+        imageUrl = msg.content;
+      }
+
+      // Format 3: message.content is an array of parts
+      if (!imageUrl && Array.isArray(msg?.content)) {
+        for (const part of msg.content as Array<{ type: string; image_url?: { url?: string } }>) {
+          if (part.type === 'image_url' && part.image_url?.url) {
+            imageUrl = part.image_url.url;
+            break;
+          }
+        }
+      }
+
+      if (!imageUrl) {
+        console.error('Gemini image: unexpected response structure', JSON.stringify(result).slice(0, 500));
+      }
 
     } else {
-      // ── DALL-E / FLUX style: images/generations endpoint ─────────────────
+      // ── FLUX style: images/generations endpoint ───────────────────────────
       const response = await fetch('https://openrouter.ai/api/v1/images/generations', {
         method: 'POST',
         headers: upstreamHeaders,
         body: JSON.stringify({
-          model: imageModel.id,
+          model: openRouterModelId,
           prompt: prompt.trim(),
           n: 1,
           size: '1024x1024',
@@ -105,12 +150,21 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       const result = await response.json() as {
         data?: Array<{ url?: string; b64_json?: string }>;
       };
-      imageUrl = result?.data?.[0]?.url;
+
+      // Prefer URL; fall back to base64 data URI
+      const item = result?.data?.[0];
+      if (item?.url) {
+        imageUrl = item.url;
+      } else if (item?.b64_json) {
+        imageUrl = `data:image/png;base64,${item.b64_json}`;
+      } else {
+        console.error('Image generation: unexpected response structure', JSON.stringify(result).slice(0, 500));
+      }
     }
 
     if (!imageUrl) {
-      console.error('No image returned from provider', { userId, model: imageModel.id });
-      return c.json({ error: 'No image returned from provider' }, 500);
+      console.error('No image returned from provider', { userId, model: imageModel.id, openRouterModel: openRouterModelId });
+      return c.json({ error: 'No image returned from the provider. Please try a different model.' }, 500);
     }
 
     await supabase.rpc('deduct_tokens', {
@@ -126,10 +180,44 @@ generateImageRouter.post('/', authMiddleware, async (c) => {
       .eq('user_id', userId)
       .single();
 
+    // ── Save to conversation ────────────────────────────────────────────────
+    let conversationId: string | null = inputConvId ?? null;
+
+    if (!conversationId) {
+      // Create a new conversation for this image generation session
+      const title = prompt.slice(0, 60) || 'Image generation';
+      const { data: conv } = await supabase
+        .from('conversations')
+        .insert({ user_id: userId, title, model: imageModel.id })
+        .select('id')
+        .single();
+      if (conv) conversationId = conv.id;
+    }
+
+    if (conversationId) {
+      // Save user prompt message
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: userId,
+        role: 'user',
+        content: prompt.trim(),
+      });
+      // Save assistant image message
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: userId,
+        role: 'assistant',
+        content: imageUrl,
+        model: imageModel.id,
+        tokens_used: tokenCost,
+      });
+    }
+
     return c.json({
       url: imageUrl,
       tokensUsed: tokenCost,
       newBalance: updatedWallet?.balance ?? wallet.balance - tokenCost,
+      conversationId,
     });
   } catch (err) {
     console.error('Image generation error', err);

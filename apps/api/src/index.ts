@@ -14,6 +14,8 @@ import { adminRouter } from './routes/admin';
 import { generateImageRouter } from './routes/generate-image';
 import { generatePresentationRouter } from './routes/generate-presentation';
 import { initRouter } from './routes/init';
+import { authRouter } from './routes/auth';
+import { coderRouter } from './routes/coder';
 import type { AppVariables } from './types';
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -35,6 +37,8 @@ app.route('/api/conversations', conversationsRouter);
 app.route('/api/admin', adminRouter);
 app.route('/api/generate-image', generateImageRouter);
 app.route('/api/generate-presentation', generatePresentationRouter);
+app.route('/api/auth', authRouter);
+app.route('/api/coder', coderRouter);
 
 const port = parseInt(process.env.PORT || '3001');
 

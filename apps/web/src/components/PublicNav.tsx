@@ -3,18 +3,32 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Zap } from 'lucide-react';
+import { Menu, X, Zap, MessageSquare } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import clsx from 'clsx';
 
 export default function PublicNav() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handler);
     return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session?.user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const links = [
@@ -26,7 +40,7 @@ export default function PublicNav() {
   return (
     <nav className={clsx(
       'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-      scrolled ? 'bg-gray-900/95 backdrop-blur-md shadow-lg shadow-black/20' : 'bg-transparent'
+      scrolled ? 'bg-gray-900/95 backdrop-blur-md shadow-lg shadow-black/20 border-b border-white/10' : 'bg-transparent'
     )}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
@@ -56,12 +70,24 @@ export default function PublicNav() {
 
           {/* CTA buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="text-gray-300 hover:text-white text-sm font-medium transition-colors px-4 py-2">
-              Sign in
-            </Link>
-            <Link href="/register" className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              Get started free
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/chat"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-all shadow-md shadow-blue-600/20 hover:shadow-blue-600/40"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Go to App</span>
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="text-gray-300 hover:text-white text-sm font-medium transition-colors px-4 py-2">
+                  Sign in
+                </Link>
+                <Link href="/register" className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                  Get started free
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -81,14 +107,24 @@ export default function PublicNav() {
             </Link>
           ))}
           <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
-            <Link href="/login" onClick={() => setOpen(false)}
-              className="block px-4 py-2 text-center text-gray-300 hover:text-white text-sm font-medium border border-white/20 rounded-lg transition-colors">
-              Sign in
-            </Link>
-            <Link href="/register" onClick={() => setOpen(false)}
-              className="block px-4 py-2 text-center bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
-              Get started free
-            </Link>
+            {isLoggedIn ? (
+              <Link href="/chat" onClick={() => setOpen(false)}
+                className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors">
+                <MessageSquare className="w-4 h-4" />
+                <span>Go to App</span>
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setOpen(false)}
+                  className="block px-4 py-2 text-center text-gray-300 hover:text-white text-sm font-medium border border-white/20 rounded-lg transition-colors">
+                  Sign in
+                </Link>
+                <Link href="/register" onClick={() => setOpen(false)}
+                  className="block px-4 py-2 text-center bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                  Get started free
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

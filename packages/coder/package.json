@@ -1,0 +1,14 @@
+{
+  "name": "@tokenai/coder",
+  "version": "1.0.0",
+  "description": "CLI coding assistant powered by TokenAI",
+  "main": "bin/index.js",
+  "bin": {
+    "tokenai": "./bin/index.js"
+  },
+  "scripts": {
+    "start": "node bin/index.js"
+  },
+  "dependencies": {},
+  "private": true
+}

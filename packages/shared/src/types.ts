@@ -1,33 +1,25 @@
 // ───────────────────────────────────────────────────────────
 // Credit bundle definitions
-// Wallet currency is "credits". Bundles priced for a ~3x markup
-// over real OpenRouter cost (see multipliers below).
+// Wallet currency is "credits" ($1 USD = 1,000,000 credits at exact OpenRouter cost).
 // ───────────────────────────────────────────────────────────
 export const TOKEN_BUNDLES = [
-  { id: 'starter',  label: 'Starter',  usd: 5,  tokens: 7_000_000,   popular: false },
-  { id: 'standard', label: 'Standard', usd: 10, tokens: 15_000_000,  popular: true  },
-  { id: 'pro',      label: 'Pro',      usd: 20, tokens: 32_000_000,  popular: false },
-  { id: 'business', label: 'Business', usd: 50, tokens: 85_000_000,  popular: false },
+  { id: 'starter',  label: 'Starter',  usd: 5,  tokens: 5_000_000,   popular: false },
+  { id: 'standard', label: 'Standard', usd: 10, tokens: 10_000_000,  popular: true  },
+  { id: 'pro',      label: 'Pro',      usd: 20, tokens: 20_000_000,  popular: false },
+  { id: 'business', label: 'Business', usd: 50, tokens: 50_000_000,  popular: false },
 ] as const;
 
 export type BundleId = typeof TOKEN_BUNDLES[number]['id'];
 
-export type ChatMode = 'chat' | 'generate' | 'presentation' | 'compare';
+export type ChatMode = 'chat' | 'generate' | 'presentation' | 'compare' | 'voice';
 
 export type ModelTier = 'free' | 'standard' | 'premium' | 'ultra';
 
 // ───────────────────────────────────────────────────────────
 // Model definitions
 //
-// multiplier  = credits charged per 1 AI token.
+// multiplier  = credits charged per 1 AI token (Exact OpenRouter Cost, 0% Profit Margin).
 //               Free models = 0 (limited by FREE_DAILY_MESSAGE_LIMIT).
-//
-// Pricing formula (Standard bundle: $10 → 15M credits = $0.667/1M per mult):
-//   multiplier = ceil(1.5 × OR_cost_per_1M / 0.667)
-//   → targets ~50% margin on every paid model.
-//
-// costPer1MTokens = blended OpenRouter cost (input+output avg), $ per 1M.
-//                   Source: openrouter.ai/api/v1/models  (verified 2026-06-22)
 // ───────────────────────────────────────────────────────────
 export const AI_MODELS = [
 
@@ -58,40 +50,37 @@ export const AI_MODELS = [
   },
 
   // ─── Google Gemini ─────────────────────────────────────────────────────
-  // gemini-2.5-flash-lite:  $0.10 in / $0.40 out → blended $0.25  → mult 1
   {
     id: 'google/gemini-2.5-flash-lite',
     label: 'Gemini 2.5 Flash Lite',
     provider: 'Google',
     tier: 'standard',
     category: 'cheap',
-    multiplier: 1,
+    multiplier: 0.25,
     costPer1MTokens: 0.25,
     supportsVision: true,
     supportsTools: true,
     badge: 'Cheapest',
   },
-  // gemini-3.5-flash:  $1.50 in / $9.00 out → blended $5.25  → mult 12
   {
     id: 'google/gemini-3.5-flash',
     label: 'Gemini 3.5 Flash',
     provider: 'Google',
     tier: 'standard',
     category: 'fast',
-    multiplier: 12,
+    multiplier: 5.25,
     costPer1MTokens: 5.25,
     supportsVision: true,
     supportsTools: true,
     badge: 'Fast',
   },
-  // gemini-2.5-pro:  $1.25 in / $10.00 out → blended $5.63  → mult 13
   {
     id: 'google/gemini-2.5-pro',
     label: 'Gemini 2.5 Pro',
     provider: 'Google',
     tier: 'premium',
     category: 'best',
-    multiplier: 13,
+    multiplier: 5.63,
     costPer1MTokens: 5.63,
     supportsVision: true,
     supportsTools: true,
@@ -99,40 +88,37 @@ export const AI_MODELS = [
   },
 
   // ─── OpenAI GPT ────────────────────────────────────────────────────────
-  // gpt-4o-mini:  $0.15 in / $0.60 out → blended $0.38  → mult 1
   {
     id: 'openai/gpt-4o-mini',
     label: 'GPT-4o Mini',
     provider: 'OpenAI',
     tier: 'standard',
     category: 'cheap',
-    multiplier: 1,
+    multiplier: 0.38,
     costPer1MTokens: 0.38,
     supportsVision: true,
     supportsTools: true,
     badge: 'Cheapest',
   },
-  // gpt-4o:  $2.50 in / $10.00 out → blended $6.25  → mult 15
   {
     id: 'openai/gpt-4o',
     label: 'GPT-4o',
     provider: 'OpenAI',
     tier: 'premium',
     category: 'fast',
-    multiplier: 15,
+    multiplier: 6.25,
     costPer1MTokens: 6.25,
     supportsVision: true,
     supportsTools: true,
     badge: 'Fast',
   },
-  // gpt-5.5:  $5.00 in / $30.00 out → blended $17.50  → mult 40
   {
     id: 'openai/gpt-5.5',
     label: 'GPT-5.5',
     provider: 'OpenAI',
     tier: 'ultra',
     category: 'best',
-    multiplier: 40,
+    multiplier: 17.50,
     costPer1MTokens: 17.50,
     supportsVision: true,
     supportsTools: true,
@@ -140,42 +126,115 @@ export const AI_MODELS = [
   },
 
   // ─── Anthropic Claude ──────────────────────────────────────────────────
-  // claude-haiku-4.5:  $1.00 in / $5.00 out → blended $3.00  → mult 7
   {
     id: 'anthropic/claude-haiku-4.5',
     label: 'Claude Haiku 4.5',
     provider: 'Anthropic',
     tier: 'standard',
     category: 'cheap',
-    multiplier: 7,
+    multiplier: 3.00,
     costPer1MTokens: 3.00,
     supportsVision: true,
     supportsTools: true,
     badge: 'Cheapest',
   },
-  // claude-sonnet-4.5:  $3.00 in / $15.00 out → blended $9.00  → mult 21
   {
     id: 'anthropic/claude-sonnet-4.5',
     label: 'Claude Sonnet 4.5',
     provider: 'Anthropic',
     tier: 'premium',
     category: 'fast',
-    multiplier: 21,
+    multiplier: 9.00,
     costPer1MTokens: 9.00,
     supportsVision: true,
     supportsTools: true,
     badge: 'Fast',
   },
-  // claude-opus-4.8:  $5.00 in / $25.00 out → blended $15.00  → mult 34
   {
     id: 'anthropic/claude-opus-4.8',
     label: 'Claude Opus 4.8',
     provider: 'Anthropic',
     tier: 'ultra',
     category: 'best',
-    multiplier: 34,
+    multiplier: 15.00,
     costPer1MTokens: 15.00,
     supportsVision: true,
+    supportsTools: true,
+    badge: 'Best',
+  },
+
+  // ─── Qwen3 ─────────────────────────────────────────────────────────────
+  {
+    id: 'qwen/qwen-3-chat-72b',
+    label: 'Qwen 3 Chat 72B',
+    provider: 'Qwen3',
+    tier: 'standard',
+    category: 'fast',
+    multiplier: 1.5,
+    costPer1MTokens: 1.5,
+    supportsVision: false,
+    supportsTools: true,
+    badge: 'Fast',
+  },
+  {
+    id: 'qwen/qwen-3-coder-32b',
+    label: 'Qwen 3 Coder 32B',
+    provider: 'Qwen3',
+    tier: 'standard',
+    category: 'cheap',
+    multiplier: 1.0,
+    costPer1MTokens: 1.0,
+    supportsVision: false,
+    supportsTools: true,
+    badge: 'Cheapest',
+  },
+  {
+    id: 'qwen/qwen-3-math-72b',
+    label: 'Qwen 3 Math 72B',
+    provider: 'Qwen3',
+    tier: 'premium',
+    category: 'best',
+    multiplier: 2.0,
+    costPer1MTokens: 2.0,
+    supportsVision: false,
+    supportsTools: true,
+    badge: 'Best',
+  },
+
+  // ─── DeepSeek ──────────────────────────────────────────────────────────
+  {
+    id: 'deepseek/deepseek-chat',
+    label: 'DeepSeek Chat (V3)',
+    provider: 'DeepSeek',
+    tier: 'standard',
+    category: 'cheap',
+    multiplier: 1.2,
+    costPer1MTokens: 1.2,
+    supportsVision: false,
+    supportsTools: true,
+    badge: 'Cheapest',
+  },
+  {
+    id: 'deepseek/deepseek-coder',
+    label: 'DeepSeek Coder (V3)',
+    provider: 'DeepSeek',
+    tier: 'standard',
+    category: 'fast',
+    multiplier: 1.2,
+    costPer1MTokens: 1.2,
+    supportsVision: false,
+    supportsTools: true,
+    badge: 'Fast',
+  },
+  {
+    id: 'deepseek/deepseek-r1',
+    label: 'DeepSeek R1 (Reasoning)',
+    provider: 'DeepSeek',
+    tier: 'premium',
+    category: 'best',
+    multiplier: 3.5,
+    costPer1MTokens: 3.5,
+    supportsVision: false,
     supportsTools: true,
     badge: 'Best',
   },
@@ -193,6 +252,15 @@ export const IMAGE_GENERATION_CREDITS = 120_000; // kept for backward compat
 export type ImageApiType = 'chat-completion' | 'image-generation';
 
 export const IMAGE_MODELS = [
+  // Google
+  {
+    id: 'google/gemini-3.1-flash-image-lite',
+    label: 'Gemini Image Lite',
+    provider: 'Google',
+    credits: 25_000,
+    quality: 'Super Fast & Low Cost',
+    apiType: 'chat-completion' as ImageApiType,
+  },
   {
     id: 'google/gemini-3.1-flash-image',
     label: 'Gemini Flash Image',
@@ -202,11 +270,45 @@ export const IMAGE_MODELS = [
     apiType: 'chat-completion' as ImageApiType,
   },
   {
+    id: 'google/gemini-3.1-pro-image',
+    label: 'Gemini Pro Image',
+    provider: 'Google',
+    credits: 250_000,
+    quality: 'High Detail & Creative',
+    apiType: 'chat-completion' as ImageApiType,
+  },
+  // Black Forest Labs
+  {
+    id: 'black-forest-labs/flux-1.1-schnell',
+    label: 'FLUX 1.1 Schnell',
+    provider: 'Black Forest Labs',
+    credits: 15_000,
+    quality: 'Instant Generation',
+    apiType: 'image-generation' as ImageApiType,
+  },
+  {
+    id: 'black-forest-labs/flux-1.1-dev',
+    label: 'FLUX 1.1 Dev',
+    provider: 'Black Forest Labs',
+    credits: 70_000,
+    quality: 'Excellent Prompt Adherence',
+    apiType: 'image-generation' as ImageApiType,
+  },
+  {
     id: 'black-forest-labs/flux-1.1-pro',
     label: 'FLUX 1.1 Pro',
     provider: 'Black Forest Labs',
     credits: 160_000,
     quality: 'Photorealistic',
+    apiType: 'image-generation' as ImageApiType,
+  },
+  // OpenAI
+  {
+    id: 'openai/dall-e-2',
+    label: 'DALL-E 2',
+    provider: 'OpenAI',
+    credits: 30_000,
+    quality: 'Stylized Art & Fast',
     apiType: 'image-generation' as ImageApiType,
   },
   {
@@ -217,9 +319,70 @@ export const IMAGE_MODELS = [
     quality: 'Creative & Detailed',
     apiType: 'image-generation' as ImageApiType,
   },
+  {
+    id: 'openai/dall-e-3-hd',
+    label: 'DALL-E 3 HD',
+    provider: 'OpenAI',
+    credits: 320_000,
+    quality: 'Super HD Detail',
+    apiType: 'image-generation' as ImageApiType,
+  },
 ] as const;
 
 export type ImageModelId = typeof IMAGE_MODELS[number]['id'];
+
+// ───────────────────────────────────────────────────────────
+// Voice generation models
+// ───────────────────────────────────────────────────────────
+export const VOICE_MODELS = [
+  // OpenAI
+  {
+    id: 'openai/tts-1',
+    label: 'OpenAI TTS-1',
+    provider: 'OpenAI',
+    credits: 50_000,
+    quality: 'High Speed',
+  },
+  {
+    id: 'openai/tts-1-hd',
+    label: 'OpenAI TTS-1 HD',
+    provider: 'OpenAI',
+    credits: 100_000,
+    quality: 'High Definition',
+  },
+  // ElevenLabs
+  {
+    id: 'elevenlabs/multilingual-v2',
+    label: 'ElevenLabs Multilingual v2',
+    provider: 'ElevenLabs',
+    credits: 150_000,
+    quality: 'Most Realistic & Natural',
+  },
+  // Grok
+  {
+    id: 'grok/tts-1-lite',
+    label: 'Grok Voice 1 Lite',
+    provider: 'Grok',
+    credits: 20_000,
+    quality: 'Expressive & Fast',
+  },
+  {
+    id: 'grok/tts-1',
+    label: 'Grok Voice 1',
+    provider: 'Grok',
+    credits: 90_000,
+    quality: 'High Performance',
+  },
+  {
+    id: 'grok/tts-1-hd',
+    label: 'Grok Voice 1 HD',
+    provider: 'Grok',
+    credits: 160_000,
+    quality: 'High Definition',
+  },
+] as const;
+
+export type VoiceModelId = typeof VOICE_MODELS[number]['id'];
 
 // ───────────────────────────────────────────────────────────
 // Free-tier abuse control
@@ -296,3 +459,19 @@ export function formatTokens(n: number): string {
   if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}K`;
   return n.toString();
 }
+
+export function formatUSD(credits: number): string {
+  if (credits === 0) return '$0.00';
+  const usd = credits / 1_000_000;
+  if (usd < 0.0001) {
+    return `$${usd.toFixed(6)}`;
+  }
+  if (usd < 0.001) {
+    return `$${usd.toFixed(5)}`;
+  }
+  if (usd < 0.1) {
+    return `$${usd.toFixed(4)}`;
+  }
+  return `$${usd.toFixed(2)}`;
+}
+

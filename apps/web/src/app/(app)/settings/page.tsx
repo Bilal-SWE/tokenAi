@@ -76,11 +76,6 @@ export default function SettingsPage() {
     { value: 'system', icon: <Monitor className="w-4 h-4" />, label: t('system') },
   ];
 
-  const langOptions: { value: Language; label: string; native: string }[] = [
-    { value: 'en', label: 'English',  native: 'English' },
-    { value: 'ar', label: 'Arabic',   native: 'العربية' },
-  ];
-
   const cardStyle = { background: 'var(--card-bg)', borderColor: 'var(--card-border)' };
   const inputStyle = { background: 'var(--input-bg)', borderColor: 'var(--input-border)', color: 'var(--text-primary)' };
 
@@ -96,7 +91,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>{t('appearance')}</h2>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Choose your theme and interface language</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Choose your theme</p>
           </div>
         </div>
 
@@ -124,36 +119,6 @@ export default function SettingsPage() {
                   {opt.label}
                 </span>
                 {theme === opt.value && <Check className="w-3.5 h-3.5 text-blue-600" />}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Language */}
-        <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('language')}</label>
-          <div className="grid grid-cols-2 gap-2">
-            {langOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setLanguage(opt.value)}
-                className={clsx(
-                  'flex items-center gap-3 p-4 rounded-xl border-2 transition-all',
-                  language === opt.value
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                    : 'border-transparent hover:border-gray-300 dark:hover:border-slate-600'
-                )}
-                style={{ background: language === opt.value ? undefined : 'var(--hover-bg)' }}
-              >
-                <Globe className={clsx('w-5 h-5', language === opt.value ? 'text-blue-600' : 'text-gray-400')} />
-                <div className="text-left">
-                  <div className={clsx('text-sm font-semibold', language === opt.value ? 'text-blue-700 dark:text-blue-300' : '')}
-                    style={{ color: language === opt.value ? undefined : 'var(--text-primary)' }}>
-                    {opt.native}
-                  </div>
-                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{opt.label}</div>
-                </div>
-                {language === opt.value && <Check className="w-3.5 h-3.5 text-blue-600 ml-auto" />}
               </button>
             ))}
           </div>

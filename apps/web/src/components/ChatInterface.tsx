@@ -6,6 +6,7 @@ import {
   Send, AlertTriangle, Loader2, Paperclip, Sparkles,
   X, Image as ImageIcon, FileText, MessageSquare, ChevronDown, Check, Copy, Pencil,
   Mic, MicOff, Link2, LayoutTemplate, Reply, Scale, Globe,
+  User, Bot, Camera, Plus, Cpu,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch, apiStream, apiStreamPresentation } from '@/lib/api';
@@ -15,8 +16,8 @@ import { useAppPreferences } from '@/context/AppPreferencesContext';
 import MarkdownMessage from './MarkdownMessage';
 import SlideViewer from './SlideViewer';
 import ConversationPickerModal from './ConversationPickerModal';
-import { AI_MODELS, IMAGE_MODELS, formatTokens, getModel, creditsForTokens } from '@tokenai/shared';
-import type { ModelId, ChatMode, ModelTier, AIModel, ImageModelId } from '@tokenai/shared';
+import { AI_MODELS, IMAGE_MODELS, VOICE_MODELS, formatTokens, formatUSD, getModel, creditsForTokens } from '@tokenai/shared';
+import type { ModelId, ChatMode, ModelTier, AIModel, ImageModelId, VoiceModelId } from '@tokenai/shared';
 import type { ConversationSummary } from '@tokenai/shared';
 import clsx from 'clsx';
 
@@ -98,6 +99,20 @@ const PROVIDER_SECTIONS: { provider: string; title: string }[] = [
   { provider: 'Google',    title: 'Google Gemini' },
   { provider: 'OpenAI',    title: 'OpenAI GPT' },
   { provider: 'Anthropic', title: 'Anthropic Claude' },
+  { provider: 'Qwen3',     title: 'Qwen3' },
+  { provider: 'DeepSeek',  title: 'DeepSeek' },
+];
+
+const VOICE_PROVIDERS = [
+  { provider: 'OpenAI',     title: 'OpenAI' },
+  { provider: 'ElevenLabs', title: 'ElevenLabs' },
+  { provider: 'Grok',       title: 'Grok' },
+];
+
+const IMAGE_PROVIDERS = [
+  { provider: 'Google',            title: 'Google' },
+  { provider: 'Black Forest Labs', title: 'Black Forest Labs' },
+  { provider: 'OpenAI',            title: 'OpenAI' },
 ];
 
 // One flagship model per provider — the best choice for generating presentations
@@ -177,6 +192,26 @@ const PROVIDER_THEME: Record<string, ProviderTheme> = {
     estimate: 'text-purple-600',
     groupBg: 'bg-purple-100',
   },
+  Qwen3: {
+    selectedChip: 'bg-indigo-600 text-white border-indigo-600',
+    selectedSub: 'text-indigo-100',
+    sendBtn: 'bg-indigo-600 hover:bg-indigo-700',
+    userBubble: 'bg-indigo-600',
+    focusRing: 'focus:ring-indigo-500',
+    attachActive: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    estimate: 'text-indigo-600',
+    groupBg: 'bg-indigo-100',
+  },
+  Grok: {
+    selectedChip: 'bg-zinc-800 text-white border-zinc-800 dark:bg-zinc-700 dark:border-zinc-700',
+    selectedSub: 'text-zinc-200',
+    sendBtn: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
+    userBubble: 'bg-zinc-800 dark:bg-zinc-700',
+    focusRing: 'focus:ring-zinc-800 dark:focus:ring-zinc-600',
+    attachActive: 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700',
+    estimate: 'text-zinc-800 dark:text-zinc-300',
+    groupBg: 'bg-zinc-100',
+  },
   NVIDIA: {
     selectedChip: 'bg-green-600 text-white border-green-600',
     selectedSub: 'text-green-100',
@@ -200,6 +235,92 @@ function rateLabel(multiplier: number): string {
 }
 
 
+
+function UserAvatar() {
+  return (
+    <div className="w-[44px] h-[44px] rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm select-none">
+      <User className="w-5 h-5" />
+    </div>
+  );
+}
+
+function ProviderAvatar({ provider }: { provider?: string }) {
+  const p = provider || 'AI';
+  const [imgError, setImgError] = useState(false);
+
+  // Map provider to domain for official favicon fetching
+  const domains: Record<string, string> = {
+    Google: 'gemini.google.com',
+    OpenAI: 'openai.com',
+    Meta: 'meta.ai',
+    DeepSeek: 'deepseek.com',
+    NVIDIA: 'nvidia.com',
+    Qwen3: 'qwenlm.github.io',
+    ElevenLabs: 'elevenlabs.io',
+    'Black Forest Labs': 'blackforestlabs.ai',
+    Poolside: 'poolside.ai',
+    Grok: 'x.ai',
+  };
+
+  const domain = domains[p];
+
+  const colors: Record<string, { bg: string; text: string }> = {
+    Google: { bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-600 dark:text-blue-400' },
+    OpenAI: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-600 dark:text-emerald-400' },
+    Anthropic: { bg: 'bg-transparent', text: 'text-[#d97757]' },
+    Meta: { bg: 'bg-sky-50 dark:bg-sky-950/20', text: 'text-sky-600 dark:text-sky-400' },
+    DeepSeek: { bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-600 dark:text-purple-400' },
+    NVIDIA: { bg: 'bg-green-50 dark:bg-green-950/20', text: 'text-green-600 dark:text-green-400' },
+    Compare: { bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-600 dark:text-indigo-400' },
+    Qwen3: { bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-600 dark:text-indigo-400' },
+    ElevenLabs: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-600 dark:text-emerald-400' },
+    'Black Forest Labs': { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-600 dark:text-violet-400' },
+    Poolside: { bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-600 dark:text-blue-400' },
+    Grok: { bg: 'bg-zinc-50 dark:bg-zinc-950/20', text: 'text-zinc-600 dark:text-zinc-400' },
+  };
+
+  const style = colors[p] || { bg: 'bg-gray-50 dark:bg-slate-800', text: 'text-gray-500 dark:text-gray-400' };
+
+  return (
+    <div className={clsx(
+      "w-[44px] h-[44px] rounded-full flex items-center justify-center flex-shrink-0 bg-white dark:bg-slate-900 border shadow-sm select-none overflow-hidden",
+      p === 'Google' && 'border-blue-100 dark:border-blue-900/50',
+      p === 'OpenAI' && 'border-emerald-100 dark:border-emerald-900/50',
+      p === 'Anthropic' && 'border-amber-100 dark:border-amber-900/50',
+      p === 'Meta' && 'border-sky-100 dark:border-sky-900/50',
+      p === 'DeepSeek' && 'border-purple-100 dark:border-purple-900/50',
+      p === 'NVIDIA' && 'border-green-100 dark:border-green-900/50',
+      p === 'Compare' && 'border-indigo-100 dark:border-indigo-900/50',
+      p === 'Qwen3' && 'border-indigo-100 dark:border-indigo-900/50',
+      p === 'ElevenLabs' && 'border-emerald-100 dark:border-emerald-900/50',
+      p === 'Black Forest Labs' && 'border-violet-100 dark:border-violet-900/50',
+      p === 'Poolside' && 'border-blue-100 dark:border-blue-900/50',
+      p === 'Grok' && 'border-zinc-200 dark:border-zinc-700',
+      p === 'AI' && 'border-gray-200 dark:border-slate-700'
+    )}>
+      {p === 'Anthropic' ? (
+        <svg className="w-8 h-8 text-[#d97757] animate-fade-in" viewBox="0 0 16 16" fill="currentColor">
+          <path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032-1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214.455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089-.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306-.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202.097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2 2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666 1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157-1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294-.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484-.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759-.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21.553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032.04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807.411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55.084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v.113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28-.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307-.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092.012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44.266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212"/>
+        </svg>
+      ) : domain && !imgError ? (
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+          alt={p}
+          className="w-7 h-7 object-contain"
+          onError={() => setImgError(true)}
+        />
+      ) : p === 'Compare' ? (
+        <div className={clsx("w-full h-full flex items-center justify-center", style.bg, style.text)}>
+          <Scale className="w-5.5 h-5.5" />
+        </div>
+      ) : (
+        <div className={clsx("w-full h-full flex items-center justify-center font-bold text-sm", style.bg, style.text)}>
+          <Bot className="w-5.5 h-5.5" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -230,13 +351,27 @@ export default function ChatInterface({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [ratePopup, setRatePopup] = useState<AIModel | null>(null);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const { isAdmin } = useApp();
+  const { isAdmin, setConversations, refreshConversations, setPendingNewChat, setSelectedModelName } = useApp();
   const [webSearch, setWebSearch] = useState(false);
   const [imageModel, setImageModel] = useState<ImageModelId>(IMAGE_MODELS[0].id);
+  const [voiceModel, setVoiceModel] = useState<VoiceModelId>('openai/tts-1');
+  const [openCategory, setOpenCategory] = useState<'chat' | 'voice' | 'image' | null>('chat');
+
+  useEffect(() => {
+    if (mode === 'voice') setOpenCategory('voice');
+    else if (mode === 'generate') setOpenCategory('image');
+    else if (mode === 'chat' || mode === 'presentation') setOpenCategory('chat');
+  }, [mode]);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const imageMenuRef = useRef<HTMLDivElement>(null);
   const [openImageGroups, setOpenImageGroups] = useState<string[]>([]);
-  const [showCompareSoon, setShowCompareSoon] = useState(false);
+  const [openVoiceGroups, setOpenVoiceGroups] = useState<string[]>([]);
+  const [soonTab, setSoonTab] = useState<string | null>(null);
+
+  function triggerSoon(tabName: string) {
+    setSoonTab(tabName);
+    setTimeout(() => setSoonTab((current) => (current === tabName ? null : current)), 2200);
+  }
   // Compare mode
   const [modelB, setModelB] = useState<ModelId>('google/gemini-2.5-flash-lite');
   const [modelBMenuOpen, setModelBMenuOpen] = useState(false);
@@ -255,8 +390,14 @@ export default function ChatInterface({
   const [linkedContext, setLinkedContext] = useState<LinkedContext | null>(null);
   const [showContextPicker, setShowContextPicker] = useState(false);
 
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -264,6 +405,18 @@ export default function ChatInterface({
   const rateDialogRef = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const { balance, setBalance, walletLoaded } = useWallet();
+
+  // Close Plus upload menu on outside click
+  useEffect(() => {
+    if (!plusMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setPlusMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [plusMenuOpen]);
 
 
   // Close model dropdown on outside click
@@ -302,9 +455,47 @@ export default function ChatInterface({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [modelBMenuOpen]);
 
+  const shouldAutoScrollRef = useRef(true);
+
+  const handleScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    shouldAutoScrollRef.current = isAtBottom;
+  }, []);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (shouldAutoScrollRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   }, [messages]);
+
+  // Reset state when conversationId changes to a different saved conversation,
+  // or when initialMessages/initialModel props update.
+  const lastIdRef = useRef(conversationId);
+  useEffect(() => {
+    if (conversationId !== lastIdRef.current) {
+      const wasNewChat = lastIdRef.current === null;
+      lastIdRef.current = conversationId;
+
+      // If we were on a new chat (null) and just transitioned to the newly created chat ID,
+      // we do NOT reset the state because the current local state has the stream results.
+      if (wasNewChat && conversationId !== null) {
+        return;
+      }
+
+      setMessages(initialMessages);
+      setModel(
+        getModel(initialModel) ? initialModel : 'google/gemini-2.5-flash-lite'
+      );
+      setError(null);
+      setLowBalanceWarning(false);
+      setAttachedImage(null);
+      setAttachedFile(null);
+      setMode('chat');
+      setHasInput(false);
+    }
+  }, [conversationId, initialMessages, initialModel]);
 
   // ── Feature 1: Text selection detection ────────────────────────────────────
   useEffect(() => {
@@ -437,42 +628,38 @@ export default function ChatInterface({
     setModelBMenuOpen(false);
   }
 
-  function handleAttachClick() {
-    const m = getModel(model);
-    if (!m?.supportsVision) {
-      setError(`${m?.label ?? 'This model'} can't read images. Please pick a model that supports images.`);
-      return;
-    }
+  function handleMediaAttachClick() {
     setError(null);
-    imageInputRef.current?.click();
+    mediaInputRef.current?.click();
   }
 
-  function handleFileAttachClick() {
-    fileInputRef.current?.click();
-  }
-
-  function handleImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 4 * 1024 * 1024) { setError('Image must be under 4MB'); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAttachedImage({ dataUrl: reader.result as string, name: file.name });
-      setAttachedFile(null);
-      setMode('chat');
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
-
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleMediaSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
 
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    const isPdf = file.type === 'application/pdf' || ext === '.pdf';
+    const isImage = file.type.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext);
 
+    if (isImage) {
+      const m = getModel(model);
+      if (!m?.supportsVision) {
+        setError(`${m?.label ?? 'This model'} can't read images. Please pick a model that supports images.`);
+        return;
+      }
+      if (file.size > 4 * 1024 * 1024) { setError('Image must be under 4MB'); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedImage({ dataUrl: reader.result as string, name: file.name });
+        setAttachedFile(null);
+        setMode('chat');
+        setError(null);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const isPdf = file.type === 'application/pdf' || ext === '.pdf';
     if (isPdf) {
       const m = getModel(model);
       if (!m?.supportsVision) {
@@ -496,7 +683,7 @@ export default function ChatInterface({
     const allowedExts = ['.txt', '.md', '.json', '.csv', '.js', '.ts', '.py', '.html', '.css'];
 
     if (!allowed.includes(file.type) && !allowedExts.includes(ext)) {
-      setError('Unsupported file type. Supported: PDF, .txt, .md, .json, .csv, .js, .ts, .py, .html, .css');
+      setError('Unsupported file type. Supported: Images, PDF, .txt, .md, .json, .csv, .js, .ts, .py, .html, .css');
       return;
     }
     if (file.size > 2 * 1024 * 1024) { setError('Text file must be under 2MB'); return; }
@@ -523,6 +710,14 @@ export default function ChatInterface({
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  function toggleVoiceGroup(key: string) {
+    setOpenVoiceGroups((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  function toggleImageGroup(key: string) {
+    setOpenImageGroups((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
   async function copyMessage(id: string, text: string) {
@@ -554,10 +749,37 @@ export default function ChatInterface({
   const estimatedTokens = Math.ceil(getInput().length / 4)
     + (attachedFile?.text ? Math.ceil(attachedFile.text.length / 4) : 0);
   const selectedModel = getModel(model) ?? AI_MODELS[0];
-  const isFreeSelected = Number(selectedModel.multiplier) === 0;
-  const estimatedCredits = creditsForTokens(model, estimatedTokens);
-  const theme = providerTheme(selectedModel.provider);
-  const supportsVision = selectedModel.supportsVision;
+  const selectedVoice = VOICE_MODELS.find((v) => v.id === voiceModel) ?? VOICE_MODELS[0];
+  const selectedImage = IMAGE_MODELS.find((im) => im.id === imageModel) ?? IMAGE_MODELS[0];
+
+  const activeProvider = mode === 'voice' 
+    ? selectedVoice.provider 
+    : mode === 'generate' 
+    ? selectedImage.provider 
+    : selectedModel.provider;
+
+  const activeLabel = mode === 'voice' 
+    ? selectedVoice.label 
+    : mode === 'generate' 
+    ? selectedImage.label 
+    : selectedModel.label;
+
+  const isFreeSelected = mode === 'chat' && Number(selectedModel.multiplier) === 0;
+  
+  const estimatedCredits = mode === 'voice'
+    ? selectedVoice.credits
+    : mode === 'generate'
+    ? selectedImage.credits
+    : creditsForTokens(model, estimatedTokens);
+
+  const theme = providerTheme(activeProvider);
+  const supportsVision = mode === 'chat' ? selectedModel.supportsVision : false;
+
+  useEffect(() => {
+    if (activeLabel) {
+      setSelectedModelName(activeLabel);
+    }
+  }, [activeLabel, setSelectedModelName]);
 
   useEffect(() => {
     if (!supportsVision) {
@@ -569,6 +791,9 @@ export default function ChatInterface({
   useEffect(() => {
     if (modelMenuOpen) {
       setOpenGroups([]);
+      setOpenVoiceGroups([]);
+      setOpenImageGroups([]);
+      setOpenCategory(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelMenuOpen]);
@@ -582,6 +807,11 @@ export default function ChatInterface({
   }, [ratePopup]);
 
   const sendMessage = useCallback(async () => {
+    shouldAutoScrollRef.current = true;
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+
     // ── Image generation mode ────────────────────────────────────────────────
     if (mode === 'generate') {
       const prompt = getInput().trim();
@@ -598,18 +828,73 @@ export default function ChatInterface({
       if (!session) { router.push('/login'); return; }
 
       try {
-        const result = await apiFetch<{ url: string; tokensUsed: number; newBalance: number }>('/api/generate-image', {
-          method: 'POST', body: JSON.stringify({ prompt, model: imageModel }),
+        const result = await apiFetch<{ url: string; tokensUsed: number; newBalance: number; conversationId?: string | null }>('/api/generate-image', {
+          method: 'POST', body: JSON.stringify({ prompt, model: imageModel, conversationId }),
         });
         setBalance(result.newBalance);
         setMessages((prev) => prev.map((m) =>
           m.streaming ? { ...m, content: '', generatedImage: result.url, streaming: false, tokensUsed: result.tokensUsed } : m
         ));
+
+        // If a new conversation was created, update the sidebar and navigate to it
+        if (result.conversationId && !conversationId) {
+          const newConv: ConversationSummary = {
+            id: result.conversationId,
+            title: prompt.slice(0, 60) || 'Image generation',
+            model: imageModel as any,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setConversations((prevList) => [newConv, ...prevList]);
+          refreshConversations();
+          onConversationCreated?.(result.conversationId);
+          router.replace(`/chat/${result.conversationId}`);
+        }
       } catch (err) {
         const status = (err as { status?: number }).status;
         const msg = (err as Error).message || '';
         if (status === 402) setError('Insufficient tokens. Top up to continue.');
         else setError(msg || 'Image generation failed. Please try again.');
+        setMessages((prev) => prev.map((m) => m.streaming ? { ...m, streaming: false, content: '' } : m));
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
+    // ── Voice generation mode ────────────────────────────────────────────────
+    if (mode === 'voice') {
+      const text = getInput().trim();
+      if (!text || generating) return;
+      clearInput();
+      setError(null);
+
+      const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text };
+      const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: 'Generating speech...', streaming: true };
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setGenerating(true);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push('/login'); return; }
+
+      try {
+        // Simulate speech generation with a mock delay
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        
+        const newBal = Math.max(0, balance - estimatedCredits);
+        setBalance(newBal);
+
+        setMessages((prev) => prev.map((m) =>
+          m.streaming ? {
+            ...m,
+            content: `Speech generated successfully using **${selectedVoice.label}** (${selectedVoice.provider}):\n\n*(Audio output simulation)*`,
+            streaming: false,
+            tokensUsed: estimatedCredits,
+          } : m
+        ));
+      } catch (err) {
+        const msg = (err as Error).message || '';
+        setError(msg || 'Speech generation failed. Please try again.');
         setMessages((prev) => prev.map((m) => m.streaming ? { ...m, streaming: false, content: '' } : m));
       } finally {
         setGenerating(false);
@@ -666,10 +951,28 @@ export default function ChatInterface({
             },
             (done) => {
               setBalance(done.newBalance);
-              setMessages((prev) => prev.map((m) =>
-                m.id === msgId ? { ...m, streaming: false, tokensUsed: done.tokensUsed } : m
-              ));
+              setMessages((prev) => {
+                const updated = prev.map((m) =>
+                  m.id === msgId ? { ...m, streaming: false, tokensUsed: done.tokensUsed } : m
+                );
+                if (done.conversationId && !conversationId) {
+                  setPendingNewChat({
+                    id: done.conversationId,
+                    messages: updated,
+                  });
+                }
+                return updated;
+              });
               if (done.conversationId && !conversationId) {
+                const newConv: ConversationSummary = {
+                  id: done.conversationId,
+                  title: content.slice(0, 60) || 'New conversation',
+                  model: model,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+                setConversations((prevList) => [newConv, ...prevList]);
+                refreshConversations();
                 onConversationCreated?.(done.conversationId);
                 router.replace(`/chat/${done.conversationId}`);
               }
@@ -785,16 +1088,34 @@ export default function ChatInterface({
         (done) => {
           newConvId = done.conversationId;
           setBalance(done.newBalance);
-          setMessages((prev) => prev.map((m) =>
-            m.streaming ? {
-              ...m,
-              streaming: false,
-              tokensUsed: done.tokensUsed,
-              balanceExhausted: done.balanceExhausted,
-            } : m
-          ));
+          setMessages((prev) => {
+            const updated = prev.map((m) =>
+              m.streaming ? {
+                ...m,
+                streaming: false,
+                tokensUsed: done.tokensUsed,
+                balanceExhausted: done.balanceExhausted,
+              } : m
+            );
+            if (newConvId && !conversationId) {
+              setPendingNewChat({
+                id: newConvId,
+                messages: updated,
+              });
+            }
+            return updated;
+          });
           if (done.balanceExhausted) setLowBalanceWarning(false);
           if (newConvId && !conversationId) {
+            const newConv: ConversationSummary = {
+              id: newConvId,
+              title: content.slice(0, 60) || 'New conversation',
+              model: model,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            setConversations((prevList) => [newConv, ...prevList]);
+            refreshConversations();
             onConversationCreated?.(newConvId);
             router.replace(`/chat/${newConvId}`);
           }
@@ -817,7 +1138,7 @@ export default function ChatInterface({
       setStreaming(false);
     }
   }, [mode, streaming, generating, model, modelB, messages, conversationId, attachedImage, attachedFile,
-      linkedContext, router, setBalance, onConversationCreated]);
+      linkedContext, router, setBalance, onConversationCreated, setConversations, refreshConversations, setPendingNewChat]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -834,217 +1155,84 @@ export default function ChatInterface({
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--page-bg)' }}>
-      {/* Hidden inputs */}
-      <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleImageSelected} />
-      <input ref={fileInputRef} type="file" accept=".pdf,application/pdf,.txt,.md,.json,.csv,.js,.ts,.py,.html,.css" className="hidden" onChange={handleFileSelected} />
+      {/* Hidden inputs for Plus upload menu */}
+      <input ref={fileInputRef} type="file" accept=".pdf,application/pdf,.txt,.md,.json,.csv,.js,.ts,.py,.html,.css" className="hidden" onChange={handleMediaSelected} />
+      <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleMediaSelected} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleMediaSelected} />
 
       {/* ── Header: task selector + model ──────────────────────────────────── */}
       <div className="px-4 py-3 border-b" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-        <div className="max-w-5xl xl:max-w-6xl mx-auto space-y-2.5">
+        <div className="w-full space-y-2.5">
 
           {/* Task tabs */}
-          <div className="inline-flex rounded-xl p-1 gap-1" style={{ background: 'var(--hover-bg)' }}>
+          <div className="inline-flex rounded-xl p-1 gap-1 max-w-full overflow-x-auto no-scrollbar whitespace-nowrap" style={{ background: 'var(--hover-bg)' }}>
             <button
               type="button"
-              onClick={() => selectTask('chat')}
+              onClick={() => setMode('chat')}
               className={clsx(
                 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors',
                 mode === 'chat' ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'
               )}
             >
-              <MessageSquare className="w-4 h-4" /> {t('chat')}
+              <MessageSquare className="w-4 h-4 text-blue-600" /> {t('chat')}
             </button>
-            <button
-              type="button"
-              onClick={() => selectTask('generate')}
-              className={clsx(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                mode === 'generate' ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'
-              )}
-            >
-              <Sparkles className="w-4 h-4" /> {t('imageCreation')}
-            </button>
-            <button
-              type="button"
-              onClick={() => selectTask('presentation')}
-              className={clsx(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                mode === 'presentation' ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-700 dark:text-teal-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'
-              )}
-            >
-              <LayoutTemplate className="w-4 h-4" /> {t('presentation')}
-            </button>
+
+            {/* Image Creation */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setShowCompareSoon(true); setTimeout(() => setShowCompareSoon(false), 2000); }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-500 hover:text-gray-700 dark:text-slate-400"
+                onClick={() => triggerSoon('image')}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-gray-600 dark:text-slate-500"
               >
-                <Scale className="w-4 h-4" /> Compare
+                <Sparkles className="w-4 h-4 text-violet-400 opacity-60" /> {t('imageCreation')}
               </button>
-              {showCompareSoon && (
-                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg animate-fade-in"
-                  style={{ background: 'var(--text-primary)' }}>
-                  Coming Soon 🚀
+              {soonTab === 'image' && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg animate-fade-in bg-gray-900 dark:bg-slate-800 border border-gray-700">
+                  Soon... 🚀
+                </div>
+              )}
+            </div>
+
+            {/* Presentation */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => triggerSoon('presentation')}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-gray-600 dark:text-slate-500"
+              >
+                <LayoutTemplate className="w-4 h-4 text-teal-400 opacity-60" /> {t('presentation')}
+              </button>
+              {soonTab === 'presentation' && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg animate-fade-in bg-gray-900 dark:bg-slate-800 border border-gray-700">
+                  Soon... 🚀
+                </div>
+              )}
+            </div>
+
+            {/* Compare */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => triggerSoon('compare')}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-gray-600 dark:text-slate-500"
+              >
+                <Scale className="w-4 h-4 opacity-60" /> Compare
+              </button>
+              {soonTab === 'compare' && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-lg animate-fade-in bg-gray-900 dark:bg-slate-800 border border-gray-700">
+                  Soon... 🚀
                 </div>
               )}
             </div>
           </div>
 
-          {/* Mode-specific controls */}
-          {(mode === 'chat' || mode === 'presentation') && (
-            <div>
-              {/* Shared dropdown trigger — same style for both chat and presentation */}
-              <div className="relative" ref={modelMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setModelMenuOpen((o) => !o)}
-                  aria-haspopup="listbox"
-                  aria-expanded={modelMenuOpen}
-                  className="w-full flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-left hover:border-gray-300 transition-colors"
-                  style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', theme.userBubble)} />
-                    <span className="font-medium text-sm truncate">{selectedModel.label}</span>
-                    <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', TIER_BADGE[selectedModel.tier])}>
-                      {rateLabel(selectedModel.multiplier)}
-                    </span>
-                    <span className="text-xs truncate hidden sm:inline" style={{ color: 'var(--text-muted)' }}>
-                      · {selectedModel.provider} · {selectedModel.badge}
-                    </span>
-                  </div>
-                  <ChevronDown className={clsx('w-4 h-4 flex-shrink-0 transition-transform', modelMenuOpen && 'rotate-180')} style={{ color: 'var(--text-muted)' }} />
-                </button>
-
-                {modelMenuOpen && (
-                  <div
-                    role="listbox"
-                    className="absolute z-20 mt-1.5 w-full max-h-96 overflow-y-auto rounded-xl border shadow-lg py-1"
-                    style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                  >
-                    {mode === 'presentation' ? (
-                      /* Presentation mode: same grouped style as chat, one group per provider */
-                      PRESENTATION_MODELS.map((m) => {
-                        const pt = providerTheme(m.provider);
-                        const groupKey = m.provider;
-                        const isOpen = openGroups.includes(groupKey);
-                        return (
-                          <div key={m.id} className={clsx('py-1', pt.groupBg, 'dark:bg-opacity-10')}>
-                            <button
-                              type="button"
-                              onClick={() => toggleGroup(groupKey)}
-                              aria-expanded={isOpen}
-                              className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors"
-                            >
-                              <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', pt.userBubble)} />
-                              <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{m.provider}</span>
-                              <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ml-auto', isOpen && 'rotate-180')} />
-                            </button>
-                            {isOpen && (
-                              <button
-                                role="option"
-                                aria-selected={model === m.id}
-                                onClick={() => selectModel(m)}
-                                className={clsx(
-                                  'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors',
-                                  model === m.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
-                                )}
-                              >
-                                <span className="w-4 flex-shrink-0 flex items-center justify-center">
-                                  {model === m.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
-                                    <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', CATEGORY_BADGE[m.badge] ?? 'bg-gray-100 text-gray-600')}>
-                                      {m.badge}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                                    {rateLabel(m.multiplier)} rate
-                                  </div>
-                                </div>
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      /* Chat mode: full grouped dropdown */
-                      [
-                        ...(isAdmin ? [{
-                          key: 'free', title: 'Free', sub: 'no credits · daily limit',
-                          bg: 'bg-violet-50 dark:bg-violet-900/20', dot: 'bg-violet-500',
-                          items: AI_MODELS.filter((m) => Number(m.multiplier) === 0),
-                        }] : []),
-                        ...PROVIDER_SECTIONS.map((s) => ({
-                          key: s.provider, title: s.title, sub: '',
-                          bg: providerTheme(s.provider).groupBg + ' dark:bg-opacity-10', dot: providerTheme(s.provider).userBubble,
-                          items: AI_MODELS.filter((m) => m.provider === s.provider && Number(m.multiplier) > 0),
-                        })),
-                      ].map((group) => {
-                        if (group.items.length === 0) return null;
-                        const isOpen = openGroups.includes(group.key);
-                        return (
-                          <div key={group.key} className={clsx('py-1', group.bg)}>
-                            <button
-                              type="button"
-                              onClick={() => toggleGroup(group.key)}
-                              aria-expanded={isOpen}
-                              className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors"
-                            >
-                              <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', group.dot)} />
-                              <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{group.title}</span>
-                              {group.sub && <span className="text-[10px] text-gray-500 normal-case">{group.sub}</span>}
-                              <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{group.items.length}</span>
-                              <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
-                            </button>
-                            {isOpen && group.items.map((m) => (
-                              <button
-                                key={m.id}
-                                role="option"
-                                aria-selected={model === m.id}
-                                onClick={() => selectModel(m)}
-                                className={clsx(
-                                  'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors',
-                                  model === m.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
-                                )}
-                              >
-                                <span className="w-4 flex-shrink-0 flex items-center justify-center">
-                                  {model === m.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
-                                    <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', CATEGORY_BADGE[m.badge] ?? 'bg-gray-100 text-gray-600')}>
-                                      {m.badge}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                                    {rateLabel(m.multiplier)} rate
-                                  </div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-              {mode === 'chat' && (
-                <a href="/pricing" className="inline-block mt-2 text-xs text-blue-600 hover:underline">View full pricing →</a>
-              )}
-              {mode === 'presentation' && (
-                <div className="flex items-center gap-2 mt-2 rounded-xl border border-teal-200 bg-teal-50 dark:bg-teal-900/20 dark:border-teal-800 px-3.5 py-2.5">
-                  <LayoutTemplate className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
-                  <span className="text-xs text-teal-700 dark:text-teal-300">
-                    Just describe your topic naturally — no special format needed. The AI will create professional slides automatically.
-                  </span>
-                </div>
-              )}
+          {/* Mode-specific banners */}
+          {mode === 'presentation' && (
+            <div className="flex items-center gap-2 mt-2 rounded-xl border border-teal-200 bg-teal-50 dark:bg-teal-900/20 dark:border-teal-800 px-3.5 py-2.5">
+              <LayoutTemplate className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+              <span className="text-xs text-teal-700 dark:text-teal-300">
+                Just describe your topic naturally — no special format needed. The AI will create professional slides automatically.
+              </span>
             </div>
           )}
 
@@ -1244,8 +1432,8 @@ export default function ChatInterface({
       </div>
 
       {/* ── Messages ──────────────────────────────────────────────────────────── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-5xl xl:max-w-6xl mx-auto space-y-4">
+      <div ref={messagesRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="w-full">
           {messages.length === 0 && (
             <div className="text-center mt-20">
               <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>{t('startConversation')}</p>
@@ -1259,122 +1447,174 @@ export default function ChatInterface({
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div key={msg.id} className={clsx('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+          {messages.map((msg, index) => (
+            <div key={msg.id} className={clsx(
+              "w-full",
+              index === 0 ? "mt-0" : (msg.role === 'user' ? "mt-6" : "mt-5")
+            )}>
               {msg.role === 'user' ? (
-                <div className="max-w-[80%] space-y-1.5 group">
-                  {msg.imagePreview && (
-                    <div className="flex justify-end">
-                      <img src={msg.imagePreview} alt="Attached" className="max-w-xs max-h-48 rounded-xl border border-gray-200 object-cover" />
-                    </div>
-                  )}
-                  {msg.content && (
-                    <>
-                      <div dir="auto" className={clsx('text-white rounded-2xl rounded-tr-sm px-4 py-3 text-[15px] sm:text-base whitespace-pre-wrap leading-relaxed', theme.userBubble)}>
-                        {msg.content}
+                <div className="flex flex-col items-end gap-1.5 w-full">
+                  <div className="max-w-[85%] space-y-1.5 group">
+                    {msg.imagePreview && (
+                      <div className="flex justify-end">
+                        <img src={msg.imagePreview} alt="Attached" className="max-w-xs max-h-48 rounded-xl border border-gray-200 object-cover" />
                       </div>
-                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                        <button onClick={() => copyMessage(msg.id, msg.content)} title="Copy" className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                          {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                        <button onClick={() => editMessage(msg.content)} title="Edit & resend" className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </>
-                  )}
+                    )}
+                    {msg.content && (
+                      <>
+                        <div dir="auto" className={clsx('text-white rounded-2xl rounded-tr-sm px-4 py-3 text-sm sm:text-[15px] md:text-base whitespace-pre-wrap leading-relaxed', theme.userBubble)}>
+                          {msg.content}
+                        </div>
+                        <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                          <button onClick={() => copyMessage(msg.id, msg.content)} title="Copy" className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                          <button onClick={() => editMessage(msg.content)} title="Edit & resend" className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               ) : msg.compareContent !== undefined ? (
                 /* ── Compare split view ────────────────────────────────────── */
-                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    { content: msg.content, mdl: msg.model, streaming: msg.streaming, tokens: msg.tokensUsed },
-                    { content: msg.compareContent, mdl: msg.compareModel, streaming: msg.compareStreaming, tokens: msg.compareTokensUsed },
-                  ].map((side, i) => {
-                    const sideModel = AI_MODELS.find((m) => m.id === side.mdl);
-                    return (
-                      <div key={i} className="rounded-2xl border px-4 py-3 text-sm shadow-sm flex flex-col gap-2"
-                        style={{ background: 'var(--msg-assistant-bg)', borderColor: 'var(--msg-assistant-border)' }}>
-                        {/* Header */}
-                        <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: 'var(--card-border)' }}>
-                          <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium',
-                            MODEL_COLORS[sideModel?.provider || ''] || 'bg-gray-100 text-gray-500')}>
-                            {side.mdl?.split('/')[1]}
-                          </span>
-                          <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold', TIER_BADGE[sideModel?.tier ?? 'standard'])}>
-                            {rateLabel(sideModel?.multiplier ?? 1)}
-                          </span>
-                          {side.streaming && <Loader2 className="w-3 h-3 animate-spin ml-auto" style={{ color: 'var(--text-muted)' }} />}
-                        </div>
-                        {/* Content */}
-                        <div className="flex-1">
-                          <MarkdownMessage content={side.content} />
-                          {side.streaming && (
-                            <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse rounded-sm align-middle" />
+                <div className="flex flex-col items-start gap-1.5 w-full">
+                  <ProviderAvatar provider="Compare" />
+                  <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { content: msg.content, mdl: msg.model, streaming: msg.streaming, tokens: msg.tokensUsed },
+                      { content: msg.compareContent, mdl: msg.compareModel, streaming: msg.compareStreaming, tokens: msg.compareTokensUsed },
+                    ].map((side, i) => {
+                      const sideModel = AI_MODELS.find((m) => m.id === side.mdl);
+                      return (
+                        <div key={i} className="rounded-2xl border px-4 py-3 text-sm shadow-sm flex flex-col gap-2"
+                          style={{ background: 'var(--msg-assistant-bg)', borderColor: 'var(--msg-assistant-border)' }}>
+                          {/* Header */}
+                          <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: 'var(--card-border)' }}>
+                            <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium',
+                              MODEL_COLORS[sideModel?.provider || ''] || 'bg-gray-100 text-gray-500')}>
+                              {side.mdl?.split('/')[1]}
+                            </span>
+                            <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold', TIER_BADGE[sideModel?.tier ?? 'standard'])}>
+                              {rateLabel(sideModel?.multiplier ?? 1)}
+                            </span>
+                            {side.streaming && <Loader2 className="w-3 h-3 animate-spin ml-auto" style={{ color: 'var(--text-muted)' }} />}
+                          </div>
+                          {/* Content */}
+                          <div className="flex-1">
+                            <MarkdownMessage content={side.content} />
+                            {side.streaming && (
+                              <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse rounded-sm align-middle" />
+                            )}
+                          </div>
+                          {/* Footer */}
+                          {!side.streaming && side.tokens !== undefined && (
+                            <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                                {side.tokens === 0 ? 'Free' : `${formatTokens(side.tokens)} credits (${formatUSD(side.tokens)})`}
+                              </span>
+                              <button onClick={() => copyMessage(msg.id + i, side.content)} title="Copy"
+                                className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
+                                {copiedId === msg.id + i ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
                           )}
                         </div>
-                        {/* Footer */}
-                        {!side.streaming && side.tokens !== undefined && (
-                          <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'var(--card-border)' }}>
-                            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                              {side.tokens === 0 ? 'Free' : `${formatTokens(side.tokens)} credits`}
-                            </span>
-                            <button onClick={() => copyMessage(msg.id + i, side.content)} title="Copy"
-                              className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
-                              {copiedId === msg.id + i ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                  {/* Light line under compare AI response */}
+                  <div className="w-full border-b border-gray-300 dark:border-slate-600 mt-6" />
                 </div>
               ) : (
-                <div
-                  data-role="assistant"
-                  className="w-full rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm border"
-                  style={{ background: 'var(--msg-assistant-bg)', borderColor: 'var(--msg-assistant-border)' }}
-                >
-                  {msg.generatedImage ? (
-                    <div className="space-y-2">
-                      <img src={msg.generatedImage} alt="Generated" className="rounded-xl max-w-full border border-gray-100" />
-                      <a href={msg.generatedImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Open full size</a>
-                    </div>
-                  ) : msg.isPresentation && !msg.streaming && msg.content ? (
-                    <SlideViewer content={msg.content} />
-                  ) : (
-                    <>
-                      <MarkdownMessage content={msg.content} />
-                      {msg.streaming && (
-                        <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse rounded-sm align-middle" />
-                      )}
-                      {msg.balanceExhausted && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                          <span>⚠️</span>
-                          <span>Response cut off — your token balance ran out. <a href="/topup" className="underline font-medium">Top up to continue.</a></span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {!msg.streaming && (msg.tokensUsed ?? msg.tokens_used) !== undefined && (
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--card-border)' }}>
-                      {msg.model && (
-                        <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium', MODEL_COLORS[AI_MODELS.find((m) => m.id === msg.model)?.provider || ''] || 'bg-gray-100 text-gray-500')}>
-                          {msg.model.split('/')[1]}
+                <div className="flex flex-col items-start gap-1.5 w-full">
+                  <ProviderAvatar provider={AI_MODELS.find((m) => m.id === msg.model)?.provider} />
+                  <div
+                    data-role="assistant"
+                    className="w-full rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm border"
+                    style={{ background: 'var(--msg-assistant-bg)', borderColor: 'var(--msg-assistant-border)' }}
+                  >
+                    {msg.generatedImage || (msg.content?.startsWith('data:image') || msg.content?.startsWith('https://') && msg.content?.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/i)) ? (
+                      (() => {
+                        const imgSrc = msg.generatedImage || msg.content || '';
+                        const openImage = () => {
+                          if (imgSrc.startsWith('data:')) {
+                            // Convert base64 data URL → Blob URL so the browser can show it in a new tab
+                            const [meta, b64] = imgSrc.split(',');
+                            const mime = meta.split(':')[1]?.split(';')[0] ?? 'image/png';
+                            const binary = atob(b64);
+                            const bytes = new Uint8Array(binary.length);
+                            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                            const blob = new Blob([bytes], { type: mime });
+                            const blobUrl = URL.createObjectURL(blob);
+                            const win = window.open(blobUrl, '_blank');
+                            // Revoke after the tab has loaded the blob
+                            if (win) setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+                          } else {
+                            window.open(imgSrc, '_blank', 'noopener,noreferrer');
+                          }
+                        };
+                        return (
+                          <div className="space-y-2">
+                            <img
+                              src={imgSrc}
+                              alt="Generated"
+                              onClick={openImage}
+                              className="rounded-xl max-w-full border border-gray-100 hover:opacity-90 transition-opacity cursor-zoom-in"
+                              title="Click to open full size"
+                            />
+                            <button
+                              onClick={openImage}
+                              className="text-xs text-blue-600 hover:underline"
+                            >Open full size ↗</button>
+                          </div>
+                        );
+                      })()
+                    ) : msg.isPresentation && !msg.streaming && msg.content ? (
+                      <SlideViewer content={msg.content} />
+                    ) : (
+                      <>
+                        {msg.streaming && !msg.content && (
+                          <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 font-medium py-1 animate-pulse">
+                            <Globe className="w-4 h-4 animate-spin-slow" />
+                            <span>{webSearch ? 'Searching the web and generating answer...' : 'Writing response...'}</span>
+                          </div>
+                        )}
+                        <MarkdownMessage content={msg.content} />
+                        {msg.streaming && msg.content && (
+                          <span className="inline-block w-1.5 h-4 bg-blue-500 ml-0.5 animate-pulse rounded-sm align-middle" />
+                        )}
+                        {msg.balanceExhausted && (
+                          <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <span>⚠️</span>
+                            <span>Response cut off — your token balance ran out. <a href="/topup" className="underline font-medium">Top up to continue.</a></span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {!msg.streaming && (msg.tokensUsed ?? msg.tokens_used) !== undefined && (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                        {msg.model && (
+                          <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium', MODEL_COLORS[AI_MODELS.find((m) => m.id === msg.model)?.provider || ''] || 'bg-gray-100 text-gray-500')}>
+                            {msg.model.split('/')[1]}
+                          </span>
+                        )}
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {(msg.tokensUsed ?? msg.tokens_used) === 0
+                            ? 'Free'
+                            : `${formatTokens(msg.tokensUsed ?? msg.tokens_used ?? 0)} credits (${formatUSD(msg.tokensUsed ?? msg.tokens_used ?? 0)})`}
                         </span>
-                      )}
-                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {(msg.tokensUsed ?? msg.tokens_used) === 0
-                          ? 'Free'
-                          : `${formatTokens(msg.tokensUsed ?? msg.tokens_used ?? 0)} credits`}
-                      </span>
-                      {!msg.generatedImage && msg.content && (
-                        <button onClick={() => copyMessage(msg.id, msg.content)} title="Copy" className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
-                          {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                        {!msg.generatedImage && msg.content && (
+                          <button onClick={() => copyMessage(msg.id, msg.content)} title="Copy" className="ml-auto p-1 rounded transition-colors" style={{ color: 'var(--text-muted)' }}>
+                            {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Light line under normal AI response */}
+                  <div className="w-full border-b border-gray-300 dark:border-slate-600 mt-6" />
                 </div>
               )}
             </div>
@@ -1396,7 +1636,7 @@ export default function ChatInterface({
 
       {/* ── Input area ─────────────────────────────────────────────────────── */}
       <div className="border-t px-4 py-3" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-        <div className="max-w-5xl xl:max-w-6xl mx-auto">
+        <div className="w-full">
           {walletLoaded && balance === 0 && (isGenerateMode || isPresentationMode || !isFreeSelected) ? (
             <div className="flex flex-col items-center gap-2 py-2">
               <a href="/topup" className="bg-blue-600 text-white rounded-lg px-6 py-2 text-sm font-medium hover:bg-blue-700 transition-colors">
@@ -1472,67 +1712,410 @@ export default function ChatInterface({
                 </div>
               )}
 
+              {/* Selected Model Indicator Box directly ABOVE user input */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60 shadow-2xs">
+                  <Cpu className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400">{t('selectedModelLabel')}:</span>
+                  <span className="text-[11px] font-bold text-blue-700 dark:text-blue-300">{activeLabel}</span>
+                </div>
+              </div>
+
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <textarea
-                    ref={textareaRef}
-                    onChange={(e) => { setHasInput(e.target.value.trim().length > 0); autoResize(); }}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                      isPresentationMode
-                        ? t('describePresentation')
-                        : isGenerateMode
-                        ? 'Describe the image you want to generate...'
-                        : attachedImage
-                        ? 'What would you like to know about this image?'
-                        : attachedFile
-                        ? 'Ask a question about this file...'
-                        : placeholder
-                    }
-                    rows={1}
-                    className={clsx('w-full border rounded-xl px-4 py-3 text-[15px] sm:text-base resize-none focus:outline-none focus:ring-2', theme.focusRing)}
-                    style={{
-                      minHeight: '44px',
-                      background: 'var(--input-bg)',
-                      borderColor: 'var(--input-border)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    {mode !== 'compare' && (
+                      <div className="relative" ref={modelMenuRef}>
+                        <button
+                          type="button"
+                          onClick={() => setModelMenuOpen((o) => !o)}
+                          aria-haspopup="listbox"
+                          aria-expanded={modelMenuOpen}
+                          className="flex-shrink-0 focus:outline-none transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                          title={activeLabel}
+                        >
+                          <ProviderAvatar provider={activeProvider} />
+                        </button>
+
+                        {modelMenuOpen && (
+                          <div
+                            role="listbox"
+                            className="absolute z-20 bottom-full mb-2.5 left-0 w-80 max-h-[30rem] overflow-y-auto rounded-xl border shadow-lg py-1 animate-fade-in divide-y divide-gray-100 dark:divide-slate-800"
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                          >
+                            {/* Category Accordion: Chat */}
+                            <div className="py-1">
+                              <button
+                                type="button"
+                                onClick={() => setOpenCategory(openCategory === 'chat' ? null : 'chat')}
+                                className="w-full flex items-center justify-between px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors border-0"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <MessageSquare className="w-4 h-4 text-blue-500" />
+                                  <span>Chat (Text)</span>
+                                </div>
+                                <ChevronDown className={clsx('w-4 h-4 transition-transform', openCategory === 'chat' && 'rotate-180')} />
+                              </button>
+
+                              {openCategory === 'chat' && (
+                                <div className="bg-gray-50/50 dark:bg-slate-900/50 py-1">
+                                  {mode === 'presentation' ? (
+                                    /* Presentation mode: same grouped style as chat, one group per provider */
+                                    PRESENTATION_MODELS.map((m) => {
+                                      const pt = providerTheme(m.provider);
+                                      const groupKey = m.provider;
+                                      const isOpen = openGroups.includes(groupKey);
+                                      return (
+                                        <div key={m.id} className={clsx('py-1', pt.groupBg, 'dark:bg-opacity-10')}>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleGroup(groupKey)}
+                                            aria-expanded={isOpen}
+                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors border-0"
+                                          >
+                                            <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', pt.userBubble)} />
+                                            <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{m.provider}</span>
+                                            <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ml-auto', isOpen && 'rotate-180')} />
+                                          </button>
+                                          {isOpen && (
+                                            <button
+                                              role="option"
+                                              aria-selected={model === m.id}
+                                              onClick={() => {
+                                                selectModel(m);
+                                                setMode('chat');
+                                              }}
+                                              className={clsx(
+                                                'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors border-0',
+                                                model === m.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
+                                              )}
+                                            >
+                                              <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                                                {model === m.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
+                                              </span>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
+                                                  <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', CATEGORY_BADGE[m.badge] ?? 'bg-gray-100 text-gray-600')}>
+                                                    {m.badge}
+                                                  </span>
+                                                </div>
+                                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                  {rateLabel(m.multiplier)} rate
+                                                </div>
+                                              </div>
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    /* Chat mode: full grouped dropdown */
+                                    [
+                                      ...(isAdmin ? [{
+                                        key: 'free', title: 'Free', sub: 'no credits · daily limit',
+                                        bg: 'bg-violet-50 dark:bg-violet-900/20', dot: 'bg-violet-500',
+                                        items: AI_MODELS.filter((m) => Number(m.multiplier) === 0),
+                                      }] : []),
+                                      ...PROVIDER_SECTIONS.map((s) => ({
+                                        key: s.provider, title: s.title, sub: '',
+                                        bg: providerTheme(s.provider).groupBg + ' dark:bg-opacity-10', dot: providerTheme(s.provider).userBubble,
+                                        items: AI_MODELS.filter((m) => m.provider === s.provider && Number(m.multiplier) > 0),
+                                      })),
+                                    ].map((group) => {
+                                      if (group.items.length === 0) return null;
+                                      const isOpen = openGroups.includes(group.key);
+                                      return (
+                                        <div key={group.key} className={clsx('py-1', group.bg)}>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleGroup(group.key)}
+                                            aria-expanded={isOpen}
+                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors border-0"
+                                          >
+                                            <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', group.dot)} />
+                                            <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{group.title}</span>
+                                            {group.sub && <span className="text-[10px] text-gray-500 normal-case">{group.sub}</span>}
+                                            <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{group.items.length}</span>
+                                            <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
+                                          </button>
+                                          {isOpen && group.items.map((m) => (
+                                            <button
+                                              key={m.id}
+                                              role="option"
+                                              aria-selected={model === m.id}
+                                              onClick={() => {
+                                                selectModel(m);
+                                                setMode('chat');
+                                              }}
+                                              className={clsx(
+                                                'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors border-0',
+                                                model === m.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
+                                              )}
+                                            >
+                                              <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                                                {model === m.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
+                                              </span>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
+                                                  <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0', CATEGORY_BADGE[m.badge] ?? 'bg-gray-100 text-gray-600')}>
+                                                    {m.badge}
+                                                  </span>
+                                                </div>
+                                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                  {rateLabel(m.multiplier)} rate
+                                                </div>
+                                              </div>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Category Accordion: Voice */}
+                            <div className="py-1">
+                              <button
+                                type="button"
+                                onClick={() => setOpenCategory(openCategory === 'voice' ? null : 'voice')}
+                                className="w-full flex items-center justify-between px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors border-0"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Mic className="w-4 h-4 text-emerald-500" />
+                                  <span>Voice (Text to Audio)</span>
+                                </div>
+                                <ChevronDown className={clsx('w-4 h-4 transition-transform', openCategory === 'voice' && 'rotate-180')} />
+                              </button>
+
+                              {openCategory === 'voice' && (
+                                <div className="bg-gray-50/50 dark:bg-slate-900/50 py-1">
+                                  {VOICE_PROVIDERS.map((group) => {
+                                    const items = VOICE_MODELS.filter((v) => v.provider === group.provider);
+                                    if (items.length === 0) return null;
+                                    const isOpen = openVoiceGroups.includes(group.provider);
+                                    const pt = providerTheme(group.provider);
+                                    return (
+                                      <div key={group.provider} className={clsx('py-1', pt.groupBg, 'dark:bg-opacity-10')}>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleVoiceGroup(group.provider)}
+                                          aria-expanded={isOpen}
+                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors border-0"
+                                        >
+                                          <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', pt.userBubble)} />
+                                          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{group.title}</span>
+                                          <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{items.length}</span>
+                                          <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
+                                        </button>
+                                        {isOpen && items.map((v) => (
+                                          <button
+                                            key={v.id}
+                                            role="option"
+                                            aria-selected={voiceModel === v.id}
+                                            onClick={() => {
+                                              setVoiceModel(v.id);
+                                              setMode('voice');
+                                              setModelMenuOpen(false);
+                                            }}
+                                            className={clsx(
+                                              'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors border-0',
+                                              voiceModel === v.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
+                                            )}
+                                          >
+                                            <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                                              {voiceModel === v.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{v.label}</span>
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                                                  {v.quality}
+                                                </span>
+                                              </div>
+                                              <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                {v.provider} · {formatTokens(v.credits)} tokens
+                                              </div>
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Category Accordion: Images */}
+                            <div className="py-1">
+                              <button
+                                type="button"
+                                onClick={() => setOpenCategory(openCategory === 'image' ? null : 'image')}
+                                className="w-full flex items-center justify-between px-3.5 py-2 text-sm font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors border-0"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Sparkles className="w-4 h-4 text-violet-500" />
+                                  <span>Images (Text to Image)</span>
+                                </div>
+                                <ChevronDown className={clsx('w-4 h-4 transition-transform', openCategory === 'image' && 'rotate-180')} />
+                              </button>
+
+                              {openCategory === 'image' && (
+                                <div className="bg-gray-50/50 dark:bg-slate-900/50 py-1">
+                                  {IMAGE_PROVIDERS.map((group) => {
+                                    const items = IMAGE_MODELS.filter((im) => im.provider === group.provider);
+                                    if (items.length === 0) return null;
+                                    const isOpen = openImageGroups.includes(group.provider);
+                                    const pt = providerTheme(group.provider);
+                                    return (
+                                      <div key={group.provider} className={clsx('py-1', pt.groupBg, 'dark:bg-opacity-10')}>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleImageGroup(group.provider)}
+                                          aria-expanded={isOpen}
+                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-left hover:bg-white/40 transition-colors border-0"
+                                        >
+                                          <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', pt.userBubble)} />
+                                          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{group.title}</span>
+                                          <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{items.length}</span>
+                                          <ChevronDown className={clsx('w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
+                                        </button>
+                                        {isOpen && items.map((im) => (
+                                          <button
+                                            key={im.id}
+                                            role="option"
+                                            aria-selected={imageModel === im.id}
+                                            onClick={() => {
+                                              setImageModel(im.id);
+                                              setMode('generate');
+                                              setModelMenuOpen(false);
+                                            }}
+                                            className={clsx(
+                                              'w-full flex items-center gap-2 px-3.5 py-2.5 text-left transition-colors border-0',
+                                              imageModel === im.id ? 'bg-white shadow-sm dark:bg-slate-700' : 'hover:bg-white/60'
+                                            )}
+                                          >
+                                            <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                                              {imageModel === im.id ? <Check className="w-4 h-4 text-blue-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{im.label}</span>
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
+                                                  {im.quality}
+                                                </span>
+                                              </div>
+                                              <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                {im.provider} · {formatTokens(im.credits)} tokens
+                                              </div>
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {mode === 'chat' && (
+                              <div className="border-t mt-1 pt-1.5 px-3 pb-1 text-center border-gray-100 dark:border-slate-800">
+                                <a href="/pricing" className="text-xs text-blue-600 hover:underline">View full pricing →</a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      onChange={(e) => { setHasInput(e.target.value.trim().length > 0); autoResize(); }}
+                      onKeyDown={handleKeyDown}
+                      placeholder={
+                        isPresentationMode
+                          ? t('describePresentation')
+                          : isGenerateMode
+                          ? 'Describe the image you want to generate...'
+                          : mode === 'voice'
+                          ? 'Type text to generate speech...'
+                          : attachedImage
+                          ? 'What would you like to know about this image?'
+                          : attachedFile
+                          ? 'Ask a question about this file...'
+                          : placeholder
+                      }
+                      rows={1}
+                      className={clsx('flex-1 border rounded-xl px-4 py-3 text-[15px] sm:text-base resize-none focus:outline-none focus:ring-2', theme.focusRing)}
+                      style={{
+                        minHeight: '44px',
+                        background: 'var(--input-bg)',
+                        borderColor: 'var(--input-border)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                  </div>
 
                   {/* Bottom toolbar */}
                   <div className="flex items-center gap-1 mt-2 flex-wrap">
-                    {!isGenerateMode && !isPresentationMode && (
-                      <button
-                        onClick={handleAttachClick}
-                        title="Upload an image"
-                        className={clsx(
-                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border',
-                          attachedImage ? theme.attachActive : 'border-gray-200 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700'
-                        )}
-                        style={{ color: attachedImage ? undefined : 'var(--text-secondary)' }}
-                      >
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{t('uploadImage')}</span>
-                      </button>
-                    )}
+                     {!isGenerateMode && !isPresentationMode && mode !== 'voice' && (
+                      <div className="relative" ref={plusMenuRef}>
+                        <button
+                          onClick={() => setPlusMenuOpen((v) => !v)}
+                          title="Add attachment"
+                          className={clsx(
+                            'w-8 h-8 rounded-xl flex items-center justify-center transition-all border shadow-xs',
+                            (attachedImage || attachedFile || plusMenuOpen)
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-blue-500/20'
+                              : 'border-gray-200 hover:bg-gray-100 dark:border-slate-600 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-300'
+                          )}
+                        >
+                          <Plus className={clsx('w-4 h-4 transition-transform duration-200', plusMenuOpen && 'rotate-45')} />
+                        </button>
 
-                    {!isGenerateMode && !isPresentationMode && (
-                      <button
-                        onClick={handleFileAttachClick}
-                        title="Upload a file"
-                        className={clsx(
-                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border',
-                          attachedFile ? theme.attachActive : 'border-gray-200 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700'
+                        {/* Dropdown Menu */}
+                        {plusMenuOpen && (
+                          <div
+                            className="absolute z-30 bottom-full mb-2 left-0 w-56 rounded-xl border shadow-xl py-1 animate-fade-in divide-y divide-gray-100 dark:divide-slate-800"
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                          >
+                            <div className="py-1">
+                              <button
+                                onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                                style={{ color: 'var(--text-primary)' }}
+                              >
+                                <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                <span>{t('pickFile')}</span>
+                              </button>
+
+                              <button
+                                onClick={() => { setPlusMenuOpen(false); galleryInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                                style={{ color: 'var(--text-primary)' }}
+                              >
+                                <ImageIcon className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                                <span>{t('pickGallery')}</span>
+                              </button>
+
+                              <button
+                                onClick={() => { setPlusMenuOpen(false); cameraInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                                style={{ color: 'var(--text-primary)' }}
+                              >
+                                <Camera className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                <span>{t('openCamera')}</span>
+                              </button>
+                            </div>
+                          </div>
                         )}
-                        style={{ color: attachedFile ? undefined : 'var(--text-secondary)' }}
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{t('uploadFile')}</span>
-                      </button>
+                      </div>
                     )}
 
                     {/* Feature 3: Voice input button */}
-                    {!isGenerateMode && (
+                    {!isGenerateMode && mode !== 'voice' && (
                       <button
                         onClick={toggleVoice}
                         title={listening ? 'Stop recording' : 'Voice input'}
@@ -1551,25 +2134,25 @@ export default function ChatInterface({
 
 
                     {/* Web Search toggle */}
-                    {!isGenerateMode && !isPresentationMode && (
+                    {!isGenerateMode && !isPresentationMode && mode !== 'voice' && (
                       <button
+                        type="button"
                         onClick={() => setWebSearch((v) => !v)}
-                        title={webSearch ? 'Web search ON — click to disable' : 'Enable web search'}
+                        title={webSearch ? 'Web search enabled — click to disable' : 'Enable web search'}
                         className={clsx(
-                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border shadow-sm',
                           webSearch
-                            ? 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700'
-                            : 'border-gray-200 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700'
+                            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                            : 'border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300'
                         )}
-                        style={{ color: webSearch ? undefined : 'var(--text-secondary)' }}
                       >
-                        <Globe className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Web</span>
+                        <Globe className={clsx('w-3.5 h-3.5', webSearch && 'animate-spin-slow text-white')} />
+                        <span>{webSearch ? 'Web Search 🌐 (Enabled)' : 'Web Search'}</span>
                       </button>
                     )}
 
                     {/* Feature 5: Link context conversation */}
-                    {!isGenerateMode && (
+                    {!isGenerateMode && mode !== 'voice' && (
                       <button
                         onClick={() => setShowContextPicker(true)}
                         title="Link a conversation as context"
@@ -1587,7 +2170,7 @@ export default function ChatInterface({
                     )}
 
                     {/* Credit estimate */}
-                    {hasInput && !isGenerateMode && (
+                    {hasInput && mode !== 'compare' && (
                       <span className={clsx('ml-2 text-xs font-medium', isFreeSelected ? 'text-green-600' : theme.estimate)}>
                         {isFreeSelected ? 'Free' : `~${formatTokens(estimatedCredits)} credits`}
                       </span>
@@ -1618,6 +2201,8 @@ export default function ChatInterface({
                   }
                 </button>
               </div>
+
+
             </>
           )}
         </div>
@@ -1689,7 +2274,7 @@ export default function ChatInterface({
                   {ratePopup.multiplier}<span className="text-3xl">×</span>
                 </span>
                 <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-                  {ratePopup.multiplier === 1 ? 'baseline rate — cheapest paid model' : `compared to ${CHEAPEST_PAID_MODEL.label}`}
+                  {ratePopup.multiplier === CHEAPEST_PAID_MODEL.multiplier ? 'baseline rate — cheapest paid model' : `compared to ${CHEAPEST_PAID_MODEL.label}`}
                 </p>
               </div>
             </div>
@@ -1697,7 +2282,7 @@ export default function ChatInterface({
             {/* Description */}
             <div className="px-5 pb-5 space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <p>
-                {ratePopup.multiplier === 1
+                {ratePopup.multiplier === CHEAPEST_PAID_MODEL.multiplier
                   ? <><b style={{ color: 'var(--text-primary)' }}>{ratePopup.label}</b> uses the lowest token rate available.</>
                   : <>For the same message, <b style={{ color: 'var(--text-primary)' }}>{ratePopup.label}</b> uses{' '}
                     <b style={{ color: 'var(--text-primary)' }}>{ratePopup.multiplier}×</b> more tokens than{' '}

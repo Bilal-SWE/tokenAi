@@ -35,16 +35,54 @@
   --msg-assistant-border: #334155;
 }
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: var(--page-bg);
-  color: var(--text-primary);
+/* Fluid responsive typography scaling */
+html {
+  font-size: 15px;
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Dark mode overrides for base elements */
-.dark .chat-page-bg { background-color: var(--page-bg); }
-.dark .sidebar { background-color: var(--sidebar-bg); border-color: var(--sidebar-border); }
-.dark .card { background-color: var(--card-bg); border-color: var(--card-border); }
+@media (max-width: 639px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  touch-action: manipulation;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar for clean horizontal scroll on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Responsive code blocks & text wrapping */
+pre, code {
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Touch-friendly interactive elements */
+button, input, select, textarea {
+  font-size: inherit;
+  touch-action: manipulation;
+}
 
 /* Native dialog backdrop — renders in browser top layer, above all z-index */
 dialog::backdrop {

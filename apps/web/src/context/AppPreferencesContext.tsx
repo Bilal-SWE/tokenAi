@@ -15,6 +15,17 @@ const translations = {
     continueConversation: 'Continue the conversation...',
     uploadImage: 'Upload image',
     uploadFile: 'Upload file',
+    uploadMedia: 'Upload File / Image',
+    pickFile: 'Choose a file',
+    pickGallery: 'Choose from gallery',
+    openCamera: 'Open camera',
+    chatHistory: 'Chats',
+    hideConversations: 'Hide conversations',
+    showConversations: 'Show conversations',
+    selectedModelLabel: 'Selected Model',
+    adminMenu: 'Admin Panel',
+    closeSidebar: 'Close sidebar',
+    openSidebar: 'Open sidebar',
     voice: 'Voice',
     listening: 'Listening...',
     addContext: 'Add context',
@@ -51,6 +62,17 @@ const translations = {
     continueConversation: 'واصل المحادثة...',
     uploadImage: 'رفع صورة',
     uploadFile: 'رفع ملف',
+    uploadMedia: 'رفع ملف / صورة',
+    pickFile: 'اختيار ملف من الملفات',
+    pickGallery: 'اختيار من المعرض',
+    openCamera: 'فتح الكاميرا',
+    chatHistory: 'المحادثات',
+    hideConversations: 'إخفاء المحادثات',
+    showConversations: 'إظهار المحادثات',
+    selectedModelLabel: 'المودل المختار',
+    adminMenu: 'لوحة الإدارة',
+    closeSidebar: 'إغلاق القائمة',
+    openSidebar: 'فتح القائمة',
     voice: 'صوت',
     listening: 'جارٍ الاستماع...',
     addContext: 'إضافة سياق',
@@ -107,9 +129,8 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const savedTheme = (localStorage.getItem('tokenai-theme') as Theme) || 'light';
-    const savedLang = (localStorage.getItem('tokenai-language') as Language) || 'en';
     setThemeState(savedTheme);
-    setLanguageState(savedLang);
+    setLanguageState('en');
   }, []);
 
   useEffect(() => {
@@ -126,9 +147,9 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
   }, [theme]);
 
   useEffect(() => {
-    document.documentElement.lang = language;
-    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
-  }, [language]);
+    document.documentElement.lang = 'en';
+    document.documentElement.dir = 'ltr';
+  }, []);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
@@ -136,13 +157,12 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
   }, []);
 
   const setLanguage = useCallback((l: Language) => {
-    setLanguageState(l);
-    localStorage.setItem('tokenai-language', l);
+    setLanguageState('en');
   }, []);
 
   const t = useCallback((key: TranslationKey): string => {
-    return translations[language][key] ?? translations.en[key];
-  }, [language]);
+    return translations.en[key];
+  }, []);
 
   return (
     <Ctx.Provider value={{ theme, language, isDark, setTheme, setLanguage, t }}>
