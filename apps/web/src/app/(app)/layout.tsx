@@ -454,7 +454,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden relative" style={{ background: 'var(--page-bg)' }}>
+    <div className="flex h-[100dvh] overflow-hidden relative" style={{ background: 'var(--page-bg)' }}>
       {/* Mobile backdrop overlay */}
       {mobileDrawerOpen && (
         <div

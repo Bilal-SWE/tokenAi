@@ -2140,14 +2140,15 @@ export default function ChatInterface({
                         onClick={() => setWebSearch((v) => !v)}
                         title={webSearch ? 'Web search enabled — click to disable' : 'Enable web search'}
                         className={clsx(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border shadow-sm',
+                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border whitespace-nowrap',
                           webSearch
                             ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-blue-500/20'
                             : 'border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300'
                         )}
                       >
                         <Globe className={clsx('w-3.5 h-3.5', webSearch && 'animate-spin-slow text-white')} />
-                        <span>{webSearch ? 'Web Search 🌐 (Enabled)' : 'Web Search'}</span>
+                        <span className="hidden sm:inline">{webSearch ? 'Web Search 🌐 (Enabled)' : 'Web Search'}</span>
+                        <span className="inline sm:hidden">{webSearch ? 'Search (ON)' : 'Search'}</span>
                       </button>
                     )}
 
